@@ -18,6 +18,9 @@ Auction House than the crafted item sells for at an NPC vendor.
      Optional or finishing reagents are ignored. If a slot accepts several items (e.g. quality ranks), the cheapest
      one is used.
    - **Vendor value** = item vendor sell price x guaranteed minimum output quantity.
+   - **Auction value** = Auctionator price of the crafted item x the same quantity, for comparison. It is shown in
+     gold when selling on the AH, after the 5% AH cut, beats vendoring. The row tooltip shows the profit for both
+     ways of selling. The "Shuffle me!" flag is still based on vendor value only.
    - If `reagent cost < vendor value`, the item is flagged **Shuffle me!**
 
 Prices are re-evaluated automatically whenever Auctionator finishes a scan.
@@ -57,6 +60,10 @@ when you only need 2). The listed cost spreads a craft's price over everything i
 a bit lower than what you spend on one craft. The tooltip shows both numbers when they differ.
 
 Flagged items also get a "Shuffle me!" line in their item tooltip.
+
+## Development
+
+`lua tests/run.lua` runs offline tests of the scanning and pricing logic against a mocked WoW API.
 
 ## Notes
 
