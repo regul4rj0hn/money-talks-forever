@@ -176,7 +176,7 @@ local function CreateUI()
 
   frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   frame.title:SetPoint("TOP", 0, -5)
-  frame.title:SetText("CraftShuffler")
+  frame.title:SetText("CraftShuffler v" .. ns.VERSION)
 
   -- Column headers
   local x = 16

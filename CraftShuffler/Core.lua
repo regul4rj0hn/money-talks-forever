@@ -2,6 +2,8 @@
 local ADDON_NAME, ns = ...
 
 ns.CALLER_ID = "CraftShuffler"
+local GetMeta = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
+ns.VERSION = (GetMeta and GetMeta(ADDON_NAME, "Version")) or "?"
 ns.results = {}          -- evaluated recipe rows (see Pricing.lua)
 ns.flaggedByItem = {}    -- [outputItemID] = result row, only for "Shuffle me!" items
 
