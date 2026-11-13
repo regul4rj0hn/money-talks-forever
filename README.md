@@ -40,6 +40,8 @@ Copy the `CraftShuffler` folder to `World of Warcraft\_forever_\Interface\AddOns
 | `/shuffle craft` | Toggle pricing craftable reagents at their own craft cost when cheaper (default on) |
 | `/shuffle soulbound` | Toggle including soulbound crafts (default off) |
 | `/shuffle minprofit <gold>` | Minimum profit per craft to be flagged, e.g. `0.5` = 50s |
+| `/shuffle shop` | Create the Auctionator shopping list `CraftShuffler` with max prices (same as the **Shopping list** button) |
+| `/shuffle duration 12\|24\|48` | Auction duration used for deposits (default 12h) |
 | `/shuffle reset` | Forget this character's recorded recipes |
 
 The **Reagents** column shows `buy all` when every reagent should be bought, or `buy + craft` when it is cheaper to
@@ -60,6 +62,31 @@ when you only need 2). The listed cost spreads a craft's price over everything i
 a bit lower than what you spend on one craft. The tooltip shows both numbers when they differ.
 
 Flagged items also get a "Shuffle me!" line in their item tooltip.
+
+## Buying in volume: max prices and the shopping list
+
+For every bought reagent, the row tooltip shows a **max** price: the most you can pay per unit, with the other
+reagents at current prices, and still make your minimum profit. **Shopping list** (or `/shuffle shop`) creates an
+Auctionator shopping list called `CraftShuffler`. It holds every AH reagent of your "Shuffle me!" recipes, each capped
+at its highest max price across those recipes. At the AH, search the list and buy **every listing up to the max
+price**, not just one craft's worth. Reagents bought from NPC vendors are printed in chat instead.
+
+Auctionator applies the cap to an item's cheapest listing. When you open an item, more expensive listings are still
+shown, so stop buying at the max price.
+
+## AH or vendor?
+
+The **Sell via** column says `vendor`, or `AH 14%+`. The second means listing on the AH beats vendoring if the item
+sells at least 14% of the time. Unsold auctions come back by mail and can still be vendored, so listing only risks the
+deposit:
+
+```
+list on the AH if  chance it sells  >  deposit / (AH price after cut - vendor value + deposit)
+```
+
+Deposits are read from the game whenever the AH is open, for crafted items in your bags or AH commodities. Until then
+the deposit is estimated at 15% of the vendor price per 12h and marked `est.` in the tooltip. This verdict does not
+depend on reagent cost.
 
 ## Development
 
