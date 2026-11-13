@@ -30,6 +30,17 @@ C_Item = {
   GetItemNameByID = function(id) return items[id] and items[id][1] end,
 }
 local createdLists = {}
+time = os.time
+
+-- Replicate (full scan) listings: { itemID, count, buyout, owner }
+local replicate = {}
+C_AuctionHouse = {
+  GetNumReplicateItems = function() return #replicate end,
+  GetReplicateItemInfo = function(i) -- 0-based, like the real API
+    local l = replicate[i + 1]
+    return "name", 1, l[2], 1, true, 1, 0, 0, 0, l[3], 0, false, nil, l[4], nil, 0, l[1], true
+  end,
+}
 Auctionator = { API = { v1 = {
   GetAuctionPriceByItemID = function(_, id) return ah[id] end,
   GetVendorPriceByItemID = function(_, id) return vendor[id] end,
@@ -59,15 +70,16 @@ C_TradeSkillUI = {
 }
 
 local ns = {}
-for _, f in ipairs({ "Core.lua", "Pricing.lua", "AuctionHouse.lua", "Scanner.lua" }) do
+for _, f in ipairs({ "Core.lua", "Pricing.lua", "AuctionHouse.lua", "Flips.lua", "Scanner.lua" }) do
   assert(loadfile(ADDON_DIR .. "/" .. f))("CraftShuffler", ns)
 end
 print = function() end -- silence addon chat output
 
 local function Setup(scenario)
   items, ah, vendor, recipes = scenario.items, scenario.ah, scenario.vendor or {}, scenario.recipes
-  CraftShufflerDB = { chars = {}, deposits = {}, settings = {
-    useVendorReagentPrice = true, craftReagents = true, includeSoulbound = false, minProfit = 1, ahDuration = 1 } }
+  CraftShufflerDB = { chars = {}, deposits = {}, flips = {}, settings = {
+    useVendorReagentPrice = true, craftReagents = true, includeSoulbound = false, minProfit = 1, ahDuration = 1,
+    flipMinProfit = 1 } }
   ns.ScanOpenProfession()
   flush()
 end
@@ -211,6 +223,42 @@ tests["max reagent prices and Auctionator shopping list"] = function()
   ns.CreateShoppingList()
   local list = createdLists[ns.SHOPPING_LIST_NAME]
   assert(list and #list == 1 and list[1] == '"Linen Cloth";;;;;;;;0.0124;;;;', tostring(list and list[1]))
+end
+
+tests["vendor flips from full scan listings"] = function()
+  -- vendor prices: Linen Cloth 1, Bolt 10, Shirt 200
+  Setup(LINEN)
+  replicate = {
+    { 2996, 5, 25 },              -- 5 bolts for 25 (5 each) -> vendor 50 -> +25
+    { 2996, 2, 30 },              -- 15 each > 10 -> not a flip
+    { 2996, 1, 9 },               -- 9 < 10 -> +1
+    { 2568, 1, 150 },             -- shirt 150 < 200 -> +50
+    { 2568, 1, 0 },               -- bid only -> skipped
+    { 2568, 1, 10, "Tester" },    -- own auction -> skipped
+    { 2589, 20, 20 },             -- cloth 1 each = vendor -> no profit
+    { 9999, 1, 1 },               -- uncached item -> skipped
+  }
+  assert(ns.ScanReplicateForFlips(true))
+  flush()
+  local f = ns.flips
+  assert(#f.items == 2, "#items " .. #f.items)
+  assert(f.items[1].itemID == 2568 and f.items[1].profit == 50, "sorted by profit")
+  local bolt = f.items[2]
+  assert(bolt.listings == 2 and bolt.qty == 6 and bolt.cost == 34 and bolt.vendor == 60 and bolt.profit == 26)
+  assert(bolt.maxUnit == 9 and bolt.vendorUnit == 10)
+  assert(f.skipped == 1 and CraftShufflerDB.flips.Realm == f)
+
+  CraftShufflerDB.settings.flipMinProfit = 30
+  ns.ScanReplicateForFlips(true); flush()
+  assert(#ns.flips.items == 1 and ns.flips.items[1].itemID == 2568)
+
+  ns.CreateFlipsShoppingList()
+  local list = createdLists[ns.FLIPS_LIST_NAME]
+  assert(list and #list == 1 and list[1] == '"Linen Shirt";;;;;;;;0.015;;;;', tostring(list and list[1]))
+
+  replicate = {}
+  assert(ns.ScanReplicateForFlips(true) == false, "no replicate data -> false, keeps last result")
+  assert(#ns.flips.items == 1)
 end
 
 local names = {}
