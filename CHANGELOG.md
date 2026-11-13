@@ -6,6 +6,8 @@ Each version is a [GitHub release](https://github.com/regul4rj0hn/craft-shuffler
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-13
+
 ### Added
 - **Vendor flips** tab: AH listings priced below what a vendor pays, found in Auctionator's full scan data. Shows
   listings, quantity, the max price to pay each, total cost and profit, sorted by profit.
