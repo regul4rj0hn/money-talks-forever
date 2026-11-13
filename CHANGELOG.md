@@ -12,6 +12,8 @@ Each version is a [GitHub release](https://github.com/regul4rj0hn/craft-shuffler
 - `CraftShuffler Flips` Auctionator shopping list, `/shuffle flips` and `/shuffle flipmin <gold>`.
 
 ### Changed
+- Release workflow can also be run by hand for an existing tag. `release.sh --push` pushes the branch and the tag
+  separately.
 - The results window now has **Crafts** and **Vendor flips** tabs. Shopping list and Refresh act on the current tab.
 
 ## [0.1.0] - 2026-11-13

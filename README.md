@@ -120,11 +120,12 @@ Versions follow semver, starting at 0.x until the addon is proven in game. Add e
 
 ```
 scripts/release.sh patch|minor|major      # bump TOC version, date the changelog, commit, tag vX.Y.Z
-git push origin main --follow-tags        # or pass --push to the script
+git push origin main && git push origin vX.Y.Z   # or pass --push to the script
 ```
 
 Pushing a `v*` tag runs [the release workflow](.github/workflows/release.yml). It runs the tests, checks the tag
 matches the TOC version, and publishes a GitHub release with the zip and that version's changelog notes.
+If a tag ever ends up without a release, run the workflow by hand: `gh workflow run release.yml -f tag=vX.Y.Z`.
 
 ## Notes
 

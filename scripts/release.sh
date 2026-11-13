@@ -51,8 +51,10 @@ git tag -a "$tag" -m "CraftShuffler $tag"
 echo "Tagged $tag ($current -> $next)."
 
 if [[ "$push" == "--push" ]]; then
-  git push origin main --follow-tags
+  # Separate pushes: the tag push must arrive after the commit it points to is on GitHub.
+  git push origin main
+  git push origin "$tag"
   echo "Pushed. The GitHub Action will publish the release."
 else
-  echo "Publish with: git push origin main --follow-tags"
+  echo "Publish with: git push origin main && git push origin $tag"
 fi
