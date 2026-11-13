@@ -39,8 +39,22 @@ Copy the `CraftShuffler` folder to `World of Warcraft\_forever_\Interface\AddOns
 | `/shuffle minprofit <gold>` | Minimum profit per craft to be flagged, e.g. `0.5` = 50s |
 | `/shuffle reset` | Forget this character's recorded recipes |
 
-The row tooltip marks each reagent as `(craft)`, `(vendor)` or AH-priced, and for craftable reagents shows the buy
-vs. craft price side by side.
+The **Reagents** column shows `buy all` when every reagent should be bought, or `buy + craft` when it is cheaper to
+craft some reagents yourself first. Hover a row for the step-by-step plan:
+
+```
+1. Buy:
+    6x Linen Cloth                 120c (AH)
+2. Craft, in this order:
+    3x Bolt of Linen Cloth
+    1x Linen Shirt  <- vendor this
+Craftable reagents             buy / craft each
+    Bolt of Linen Cloth          60c / [40c]
+```
+
+Buy quantities are summed across all crafting levels, and leftovers are listed (e.g. a craft that makes 5 thread
+when you only need 2). The listed cost spreads a craft's price over everything it makes, so with leftovers it can be
+a bit lower than what you spend on one craft. The tooltip shows both numbers when they differ.
 
 Flagged items also get a "Shuffle me!" line in their item tooltip.
 
