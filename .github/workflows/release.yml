@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check tag matches TOC version
+        run: |
+          toc=$(sed -n 's/^## Version: *//p' CraftShuffler/CraftShuffler.toc | tr -d '\r')
+          if [ "v$toc" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match TOC version $toc" >&2
+            exit 1
+          fi
+
+      - name: Run tests (Lua 5.1, as in WoW)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lua5.1
+          lua5.1 tests/run.lua
+
+      - name: Build zip
+        run: |
+          # The zip contains the CraftShuffler/ folder, ready to extract into Interface/AddOns/.
+          zip -r "CraftShuffler-$GITHUB_REF_NAME.zip" CraftShuffler
+
+      - name: Extract release notes from CHANGELOG
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            $0 ~ "^## \\[" v "\\]" { f = 1; next }
+            /^## \[/ { f = 0 }
+            f
+          ' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "Release $GITHUB_REF_NAME" > notes.md
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "CraftShuffler-$GITHUB_REF_NAME.zip" \
+            --title "CraftShuffler $GITHUB_REF_NAME" \
+            --notes-file notes.md
