@@ -7,6 +7,7 @@ ns.flaggedByItem = {}    -- [outputItemID] = result row, only for "Shuffle me!" 
 
 local DEFAULTS = {
   useVendorReagentPrice = true, -- reagent price = min(AH price, NPC vendor buy price known to Auctionator)
+  craftReagents = true,         -- reagents you can craft yourself are priced at min(buy price, craft cost)
   includeSoulbound = false,     -- also evaluate Bind-on-Pickup / account-bound crafted items
   onlyShuffle = false,          -- UI filter: show only "Shuffle me!" rows
   minProfit = 1,                -- copper; vendor value - reagent cost must be >= this to be flagged
@@ -102,6 +103,7 @@ local function Help()
   print("  /shuffle - toggle the window")
   print("  /shuffle list - print all 'Shuffle me!' items to chat")
   print("  /shuffle vendor - toggle using NPC vendor reagent prices (" .. OnOff(s.useVendorReagentPrice) .. ")")
+  print("  /shuffle craft - toggle pricing reagents at their own craft cost when cheaper (" .. OnOff(s.craftReagents) .. ")")
   print("  /shuffle soulbound - toggle including soulbound crafts (" .. OnOff(s.includeSoulbound) .. ")")
   print("  /shuffle minprofit <gold> - minimum profit per craft, e.g. 0.5 = 50s (now " .. ns.Money(s.minProfit) .. ")")
   print("  /shuffle reset - forget this character's stored recipes")
@@ -131,6 +133,10 @@ SlashCmdList.CRAFTSHUFFLER = function(msg)
   elseif cmd == "vendor" then
     s.useVendorReagentPrice = not s.useVendorReagentPrice
     Print("vendor reagent prices " .. OnOff(s.useVendorReagentPrice))
+    ns.Evaluate()
+  elseif cmd == "craft" then
+    s.craftReagents = not s.craftReagents
+    Print("craft-your-own reagents " .. OnOff(s.craftReagents))
     ns.Evaluate()
   elseif cmd == "soulbound" then
     s.includeSoulbound = not s.includeSoulbound

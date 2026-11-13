@@ -27,9 +27,14 @@ local function ShowRowTooltip(row)
   GameTooltip:AddLine(" ")
   GameTooltip:AddLine(("Recipe: %s (yields %d)"):format(d.name or "?", d.qty or 1), 1, 0.82, 0)
   for _, b in ipairs(d.breakdown or {}) do
-    local right = b.total and (ns.Money(b.total) .. (b.source == "vendor" and " |cff999999(vendor)|r" or ""))
-      or "|cffff9900no price|r"
+    local tag = (b.source == "vendor" and " |cff999999(vendor)|r") or (b.source == "craft" and " |cff66ccff(craft)|r") or ""
+    local right = b.total and (ns.Money(b.total) .. tag) or "|cffff9900no price|r"
     GameTooltip:AddDoubleLine(("  %dx %s"):format(b.qty, b.name or "?"), right, 0.9, 0.9, 0.9, 1, 1, 1)
+    if b.craftUnit then
+      -- Show both options so you can see whether buying or crafting this reagent is cheaper.
+      GameTooltip:AddDoubleLine("      buy / craft each",
+        ns.Money(b.buyUnit) .. "  /  " .. ns.Money(b.craftUnit), 0.6, 0.6, 0.6, 0.7, 0.7, 0.7)
+    end
   end
   GameTooltip:AddLine("Shift-click to link in chat.", 0.5, 0.5, 0.5)
   GameTooltip:Show()
