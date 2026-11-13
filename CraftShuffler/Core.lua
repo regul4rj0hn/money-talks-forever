@@ -11,6 +11,7 @@ local DEFAULTS = {
   includeSoulbound = false,     -- also evaluate Bind-on-Pickup / account-bound crafted items
   onlyShuffle = false,          -- UI filter: show only "Shuffle me!" rows
   minProfit = 1,                -- copper; vendor value - reagent cost must be >= this to be flagged
+  ahDuration = 1,               -- auction duration used for deposits: 1 = 12h, 2 = 24h, 3 = 48h
   chatAlert = true,             -- print a summary after each Auctionator scan
 }
 
@@ -75,6 +76,7 @@ frame:SetScript("OnEvent", function(_, event, arg1)
     CraftShufflerDB = CraftShufflerDB or {}
     CraftShufflerDB.chars = CraftShufflerDB.chars or {}
     CraftShufflerDB.settings = CraftShufflerDB.settings or {}
+    CraftShufflerDB.deposits = CraftShufflerDB.deposits or {}   -- [itemID][duration] = per-unit deposit
     for k, v in pairs(DEFAULTS) do
       if CraftShufflerDB.settings[k] == nil then CraftShufflerDB.settings[k] = v end
     end
@@ -106,6 +108,8 @@ local function Help()
   print("  /shuffle craft - toggle pricing reagents at their own craft cost when cheaper (" .. OnOff(s.craftReagents) .. ")")
   print("  /shuffle soulbound - toggle including soulbound crafts (" .. OnOff(s.includeSoulbound) .. ")")
   print("  /shuffle minprofit <gold> - minimum profit per craft, e.g. 0.5 = 50s (now " .. ns.Money(s.minProfit) .. ")")
+  print("  /shuffle shop - create an Auctionator shopping list of reagents with max prices")
+  print("  /shuffle duration 12|24|48 - auction duration for deposits (now " .. ns.DURATION_HOURS[s.ahDuration] .. "h)")
   print("  /shuffle reset - forget this character's stored recipes")
   print("Open each profession window once so its recipes are recorded.")
 end
@@ -150,6 +154,18 @@ SlashCmdList.CRAFTSHUFFLER = function(msg)
     else
       s.minProfit = math.max(1, math.floor(gold * 10000 + 0.5))
       Print("minimum profit set to " .. ns.Money(s.minProfit))
+      ns.Evaluate()
+    end
+  elseif cmd == "shop" then
+    ns.CreateShoppingList()
+  elseif cmd == "duration" then
+    local idx = ({ ["12"] = 1, ["24"] = 2, ["48"] = 3 })[rest]
+    if not idx then
+      Print("usage: /shuffle duration 12|24|48")
+    else
+      s.ahDuration = idx
+      Print("auction duration set to " .. rest .. "h")
+      ns.CaptureDeposits()
       ns.Evaluate()
     end
   elseif cmd == "reset" then

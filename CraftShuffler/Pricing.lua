@@ -264,6 +264,11 @@ function ns.EvaluateRecipe(recipeID, r, ctx)
     res.auctionValue = ahUnit * res.qty
     res.auctionNet = res.auctionValue * (1 - ns.AH_CUT)
   end
+  -- AH-or-vendor verdict does not depend on reagent cost, so it is known even for unpriced recipes.
+  local depositUnit
+  depositUnit, res.depositEstimated = ns.GetDeposit(r.outputItemID, sellPrice)
+  res.deposit = depositUnit * res.qty
+  res.saleVerdict, res.breakEvenSell = ns.SaleVerdict(res)
 
   -- Don't let a reagent be priced by crafting it back out of this recipe's own output.
   local wasVisiting = ctx.visiting[r.outputItemID]
@@ -284,6 +289,12 @@ function ns.EvaluateRecipe(recipeID, r, ctx)
   res.cost = cost
   res.profit = res.vendorValue - cost
   if res.auctionNet then res.auctionProfit = res.auctionNet - cost end
+
+  -- Highest price per bought reagent that still leaves the minimum profit (others at current price).
+  local slack = res.vendorValue - res.plan.buyTotal - ns.Settings().minProfit
+  for _, b in ipairs(res.plan.buys) do
+    if b.unit and slack >= 0 then b.maxPrice = math.floor(b.unit + slack / b.qty) end
+  end
   if res.vendorValue > 0 and res.profit >= ns.Settings().minProfit then
     res.status = S.SHUFFLE
   else
