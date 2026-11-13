@@ -6,6 +6,9 @@ Each version is a [GitHub release](https://github.com/regul4rj0hn/craft-shuffler
 
 ## [Unreleased]
 
+### Fixed
+- Release workflow: manual runs for older tags no longer mark that release as "Latest". Uses `actions/checkout@v5`.
+
 ## [0.2.0] - 2026-11-13
 
 ### Added

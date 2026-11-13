@@ -19,7 +19,7 @@ jobs:
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ env.TAG }}
 
@@ -56,6 +56,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Manual runs backfill older tags, so they must not take the "Latest" label from a newer release.
+          latest=true
+          [ "${{ github.event_name }}" = "workflow_dispatch" ] && latest=false
           gh release create "$TAG" "CraftShuffler-$TAG.zip" \
             --title "CraftShuffler $TAG" \
-            --notes-file notes.md
+            --notes-file notes.md \
+            --latest=$latest
