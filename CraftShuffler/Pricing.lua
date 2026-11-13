@@ -98,7 +98,7 @@ local function ResolveUnitPrice(itemID, ctx)
         if cost and #missing == 0 then
           local perUnit = cost / math.max(1, rec.qtyMin or 1)
           if not p.craftUnit or perUnit < p.craftUnit then
-            p.craftUnit, p.craftName = perUnit, rec.name
+            p.craftUnit, p.craftName, p.craftRecipe = perUnit, rec.name, rec
           end
         end
       end
@@ -116,6 +116,17 @@ local function ResolveUnitPrice(itemID, ctx)
   return p, cut
 end
 
+-- Cheapest priced option for a reagent slot (slots can accept several interchangeable items).
+local function BestOption(slot, ctx)
+  local best, bestID, cut = nil, nil, false
+  for _, id in ipairs(slot.items) do
+    local p, subCut = ResolveUnitPrice(id, ctx)
+    cut = cut or subCut
+    if p.unit and (not best or p.unit < best.unit) then best, bestID = p, id end
+  end
+  return best, bestID, cut
+end
+
 -- Total cost of one craft of recipe r. Returns cost (nil if anything is unpriced), breakdown, missing, cut.
 CostReagents = function(r, ctx)
   local cost, breakdown, missing, cut = 0, {}, {}, false
@@ -126,12 +137,8 @@ CostReagents = function(r, ctx)
       table.insert(missing, label)
       table.insert(breakdown, { name = label, qty = slot.qty })
     else
-      local best, bestID
-      for _, id in ipairs(slot.items) do
-        local p, subCut = ResolveUnitPrice(id, ctx)
-        cut = cut or subCut
-        if p.unit and (not best or p.unit < best.unit) then best, bestID = p, id end
-      end
+      local best, bestID, subCut = BestOption(slot, ctx)
+      cut = cut or subCut
       local shownID = bestID or slot.items[1]
       local line = { itemID = shownID, name = ItemName(shownID), qty = slot.qty }
       if best then
@@ -147,6 +154,75 @@ CostReagents = function(r, ctx)
     end
   end
   return (#missing == 0) and cost or nil, breakdown, missing, cut
+end
+
+-- Turns the cheapest pricing decisions into concrete steps for one craft of `r`:
+--   plan.buys      = { {itemID, name, qty, unit, source, total}, ... }  everything to purchase, summed over all levels
+--   plan.crafts    = { {itemID, name, count}, ... }  intermediate crafts in the order to perform them
+--   plan.choices   = { {itemID, name, buyUnit, craftUnit, source}, ... }  reagents where crafting was an option
+--   plan.leftovers = { {itemID, name, qty}, ... }  surplus from crafts that yield more than needed
+-- Integer craft counts are used here, while res.cost amortizes per unit, so plan.buyTotal may be slightly higher.
+local function BuildPlan(r, ctx)
+  local plan = { buys = {}, crafts = {}, choices = {}, leftovers = {}, buyTotal = 0 }
+  local buyIdx, craftIdx, choiceSeen, surplus = {}, {}, {}, {}
+
+  local function Need(itemID, qty, p)
+    if p.craftUnit and not choiceSeen[itemID] then
+      choiceSeen[itemID] = true
+      table.insert(plan.choices, { itemID = itemID, name = ItemName(itemID),
+        buyUnit = p.buyUnit, craftUnit = p.craftUnit, source = p.source })
+    end
+
+    -- Use surplus from an earlier craft first.
+    local have = surplus[itemID] or 0
+    local used = math.min(have, qty)
+    surplus[itemID] = have - used
+    qty = qty - used
+    if qty <= 0 then return end
+
+    local rec = p.source == "craft" and p.craftRecipe
+    if rec and not ctx.visiting[itemID] then
+      local yield = math.max(1, rec.qtyMin or 1)
+      local count = math.ceil(qty / yield)
+      surplus[itemID] = (surplus[itemID] or 0) + count * yield - qty
+      ctx.visiting[itemID] = true
+      for _, slot in ipairs(rec.reagents) do
+        local best, bestID = BestOption(slot, ctx)
+        if best then Need(bestID, slot.qty * count, best) end
+      end
+      ctx.visiting[itemID] = nil
+      -- Appended after its own reagents, so the list is already in crafting order.
+      local c = craftIdx[itemID]
+      if not c then
+        c = { itemID = itemID, name = ItemName(itemID), count = 0 }
+        craftIdx[itemID] = c
+        table.insert(plan.crafts, c)
+      end
+      c.count = c.count + count
+    else
+      local b = buyIdx[itemID]
+      if not b then
+        b = { itemID = itemID, name = ItemName(itemID), qty = 0, unit = p.buyUnit, source = p.buySource }
+        buyIdx[itemID] = b
+        table.insert(plan.buys, b)
+      end
+      b.qty = b.qty + qty
+    end
+  end
+
+  for _, slot in ipairs(r.reagents) do
+    local best, bestID = BestOption(slot, ctx)
+    if best then Need(bestID, slot.qty, best) end
+  end
+
+  for _, b in ipairs(plan.buys) do
+    b.total = (b.unit or 0) * b.qty
+    plan.buyTotal = plan.buyTotal + b.total
+  end
+  for itemID, qty in pairs(surplus) do
+    if qty > 0 then table.insert(plan.leftovers, { itemID = itemID, name = ItemName(itemID), qty = qty }) end
+  end
+  return plan
 end
 
 -- Returns a result row, or nil if the recipe is excluded (soulbound output).
@@ -184,6 +260,10 @@ function ns.EvaluateRecipe(recipeID, r, ctx)
   ctx.visiting[r.outputItemID] = true
   local cost
   cost, res.breakdown, res.missing = CostReagents(r, ctx)
+  if cost then
+    res.plan = BuildPlan(r, ctx)
+    res.usesCrafting = #res.plan.crafts > 0
+  end
   ctx.visiting[r.outputItemID] = wasVisiting
 
   if not cost then
