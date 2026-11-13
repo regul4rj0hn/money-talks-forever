@@ -13,6 +13,8 @@ Auction House than the crafted item sells for at an NPC vendor.
      and unbound items are kept.
    - **Reagent cost** = sum over required reagents of `quantity x cheapest unit price`, where the unit price is the
      Auctionator AH price or, if Auctionator has seen it at a merchant and it is cheaper, the NPC vendor price.
+     If you know a recipe that makes the reagent itself (e.g. Bolt of Linen Cloth from Linen Cloth), its craft cost
+     (reagent cost / quantity made, resolved recursively) is used instead when that is cheaper than buying.
      Optional or finishing reagents are ignored. If a slot accepts several items (e.g. quality ranks), the cheapest
      one is used.
    - **Vendor value** = item vendor sell price x guaranteed minimum output quantity.
@@ -32,9 +34,13 @@ Copy the `CraftShuffler` folder to `World of Warcraft\_forever_\Interface\AddOns
 | `/shuffle` | Toggle the results window (hover a row for the reagent breakdown, shift-click to link) |
 | `/shuffle list` | Print every "Shuffle me!" item to chat |
 | `/shuffle vendor` | Toggle using NPC vendor prices for reagents (default on) |
+| `/shuffle craft` | Toggle pricing craftable reagents at their own craft cost when cheaper (default on) |
 | `/shuffle soulbound` | Toggle including soulbound crafts (default off) |
 | `/shuffle minprofit <gold>` | Minimum profit per craft to be flagged, e.g. `0.5` = 50s |
 | `/shuffle reset` | Forget this character's recorded recipes |
+
+The row tooltip marks each reagent as `(craft)`, `(vendor)` or AH-priced, and for craftable reagents shows the buy
+vs. craft price side by side.
 
 Flagged items also get a "Shuffle me!" line in their item tooltip.
 
