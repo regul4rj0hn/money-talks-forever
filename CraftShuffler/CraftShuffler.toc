@@ -1,0 +1,11 @@
+## Interface: 16001
+## Title: CraftShuffler
+## Notes: Flags craftable, non-soulbound items whose Auctionator reagent cost is below the item's vendor price ("Shuffle me!").
+## Version: 0.1.0
+## OptionalDeps: Auctionator
+## SavedVariables: CraftShufflerDB
+
+Core.lua
+Pricing.lua
+Scanner.lua
+UI.lua
