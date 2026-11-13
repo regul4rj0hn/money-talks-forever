@@ -27,6 +27,8 @@ function ns.Money(copper)
   return neg and ("-" .. s) or s
 end
 
+ns.AH_CUT = 0.05 -- the auction house keeps 5% of the sale price
+
 local function SafeCall(fn, ...)
   if not fn then return nil end
   local ok, v = pcall(fn, ...)
@@ -255,6 +257,14 @@ function ns.EvaluateRecipe(recipeID, r, ctx)
   res.itemLink, res.icon, res.bindType = itemLink, icon, bindType
   res.vendorValue = (sellPrice or 0) * res.qty
 
+  -- What the output would fetch on the AH instead (Auctionator's last-scan price; nil if never seen listed).
+  local api = ns.AuctionatorAPI()
+  local ahUnit = api and SafeCall(api.GetAuctionPriceByItemID, ns.CALLER_ID, r.outputItemID)
+  if ahUnit then
+    res.auctionValue = ahUnit * res.qty
+    res.auctionNet = res.auctionValue * (1 - ns.AH_CUT)
+  end
+
   -- Don't let a reagent be priced by crafting it back out of this recipe's own output.
   local wasVisiting = ctx.visiting[r.outputItemID]
   ctx.visiting[r.outputItemID] = true
@@ -273,6 +283,7 @@ function ns.EvaluateRecipe(recipeID, r, ctx)
 
   res.cost = cost
   res.profit = res.vendorValue - cost
+  if res.auctionNet then res.auctionProfit = res.auctionNet - cost end
   if res.vendorValue > 0 and res.profit >= ns.Settings().minProfit then
     res.status = S.SHUFFLE
   else

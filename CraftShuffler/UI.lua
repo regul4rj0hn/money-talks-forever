@@ -8,6 +8,7 @@ local COLS = {
   { key = "method", label = "Reagents",     width = 90,  justify = "LEFT" },
   { key = "cost",   label = "Reagent cost", width = 110, justify = "RIGHT" },
   { key = "vendor", label = "Vendor value", width = 110, justify = "RIGHT" },
+  { key = "auction", label = "Auction value", width = 110, justify = "RIGHT" },
   { key = "profit", label = "Profit",       width = 110, justify = "RIGHT" },
   { key = "status", label = "",             width = 90,  justify = "CENTER" },
 }
@@ -27,6 +28,18 @@ local function ShowRowTooltip(row)
   GameTooltip:SetItemByID(d.itemID)
   GameTooltip:AddLine(" ")
   GameTooltip:AddLine(("Recipe: %s (yields %d)"):format(d.name or "?", d.qty or 1), 1, 0.82, 0)
+  local function ProfitText(p)
+    if not p then return "" end
+    return (p > 0 and "|cff00ff00" or "|cffff4040") .. ns.Money(p) .. "|r profit"
+  end
+  GameTooltip:AddDoubleLine("Sell to vendor: " .. ns.Money(d.vendorValue), ProfitText(d.profit), 1, 1, 1)
+  if d.auctionValue then
+    GameTooltip:AddDoubleLine(("Sell on AH: %s (%s after %d%% cut)"):format(
+      ns.Money(d.auctionValue), ns.Money(d.auctionNet), ns.AH_CUT * 100), ProfitText(d.auctionProfit), 1, 1, 1)
+  else
+    GameTooltip:AddLine("Sell on AH: no Auctionator price for this item", 0.6, 0.6, 0.6)
+  end
+  GameTooltip:AddLine(" ")
   local plan = d.plan
   if plan then
     local W, G = 0.9, 0.6
@@ -113,6 +126,9 @@ local function InitRow(row, d)
   end
   row.cells.cost:SetText(d.status == ns.STATUS.MISSING and "|cffff9900?|r" or ns.Money(d.cost))
   row.cells.vendor:SetText(ns.Money(d.vendorValue))
+  -- Gold when selling on the AH (after the cut) beats vendoring.
+  local ahBetter = d.auctionNet and d.auctionNet > (d.vendorValue or 0)
+  row.cells.auction:SetText((ahBetter and "|cffffd100" or "") .. ns.Money(d.auctionValue) .. (ahBetter and "|r" or ""))
   if d.profit then
     local color = d.profit > 0 and "|cff00ff00" or "|cffff4040"
     row.cells.profit:SetText(color .. ns.Money(d.profit) .. "|r")
