@@ -94,38 +94,40 @@ local function ShowRowTooltip(row)
   GameTooltip:Show()
 end
 
-local function InitRow(row, d)
-  if not row.cells then
-    row:SetHeight(ROW_H)
-    local hl = row:CreateTexture(nil, "HIGHLIGHT")
-    hl:SetAllPoints()
-    hl:SetColorTexture(1, 1, 1, 0.08)
+-- Creates the row's icon + one font string per column, once per recycled row frame.
+local function BuildCells(row, cols, onEnter)
+  row:SetHeight(ROW_H)
+  local hl = row:CreateTexture(nil, "HIGHLIGHT")
+  hl:SetAllPoints()
+  hl:SetColorTexture(1, 1, 1, 0.08)
 
-    row.icon = row:CreateTexture(nil, "ARTWORK")
-    row.icon:SetSize(ROW_H - 2, ROW_H - 2)
-    row.icon:SetPoint("LEFT", 2, 0)
+  row.icon = row:CreateTexture(nil, "ARTWORK")
+  row.icon:SetSize(ROW_H - 2, ROW_H - 2)
+  row.icon:SetPoint("LEFT", 2, 0)
 
-    row.cells = {}
-    local x = 0
-    for i, col in ipairs(COLS) do
-      local fs = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-      local inset = (i == 1) and (ROW_H + 4) or 0
-      fs:SetPoint("LEFT", x + inset, 0)
-      fs:SetWidth(col.width - inset - 6)
-      fs:SetJustifyH(col.justify)
-      fs:SetWordWrap(false)
-      row.cells[col.key] = fs
-      x = x + col.width
-    end
-
-    row:SetScript("OnEnter", ShowRowTooltip)
-    row:SetScript("OnLeave", GameTooltip_Hide)
-    row:SetScript("OnClick", function(self)
-      if IsModifiedClick("CHATLINK") and self.data and self.data.itemLink then
-        ChatEdit_InsertLink(self.data.itemLink)
-      end
-    end)
+  row.cells = {}
+  local x = 0
+  for i, col in ipairs(cols) do
+    local fs = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local inset = (i == 1) and (ROW_H + 4) or 0
+    fs:SetPoint("LEFT", x + inset, 0)
+    fs:SetWidth(col.width - inset - 6)
+    fs:SetJustifyH(col.justify)
+    fs:SetWordWrap(false)
+    row.cells[col.key] = fs
+    x = x + col.width
   end
+
+  row:SetScript("OnEnter", onEnter)
+  row:SetScript("OnLeave", GameTooltip_Hide)
+  row:SetScript("OnClick", function(self)
+    local link = self.data and (self.data.itemLink or self.data.link)
+    if IsModifiedClick("CHATLINK") and link then ChatEdit_InsertLink(link) end
+  end)
+end
+
+local function InitRow(row, d)
+  if not row.cells then BuildCells(row, COLS, ShowRowTooltip) end
 
   row.data = d
   row.icon:SetTexture(d.icon or 134400) -- question mark fallback
@@ -157,12 +159,117 @@ local function InitRow(row, d)
   row.cells.status:SetText(STATUS_TEXT[d.status] or "")
 end
 
+---------------------------------------------------------------------------
+-- Vendor flips table
+---------------------------------------------------------------------------
+local FLIP_COLS = {
+  { key = "item",     label = "Item",              width = 250, justify = "LEFT" },
+  { key = "listings", label = "Listings",          width = 70,  justify = "RIGHT" },
+  { key = "qty",      label = "Quantity",          width = 70,  justify = "RIGHT" },
+  { key = "maxbuy",   label = "Buy up to (each)",  width = 120, justify = "RIGHT" },
+  { key = "vendor",   label = "Vendor pays (each)", width = 120, justify = "RIGHT" },
+  { key = "cost",     label = "Total cost",        width = 110, justify = "RIGHT" },
+  { key = "profit",   label = "Profit",            width = 110, justify = "RIGHT" },
+}
+
+local function ShowFlipTooltip(row)
+  local e = row.data
+  if not e then return end
+  GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+  GameTooltip:SetItemByID(e.itemID)
+  GameTooltip:AddLine(" ")
+  GameTooltip:AddLine("|cff00ff00Vendor flip|r: buy on the AH, sell to any vendor.")
+  GameTooltip:AddDoubleLine(("Buy %d in %d listing(s)"):format(e.qty, e.listings), ns.Money(e.cost), 0.9, 0.9, 0.9, 1, 1, 1)
+  GameTooltip:AddDoubleLine("Vendor pays", ns.Money(e.vendor), 0.9, 0.9, 0.9, 1, 1, 1)
+  GameTooltip:AddDoubleLine("Profit", ns.Money(e.profit), 0.9, 0.9, 0.9, 0, 1, 0)
+  GameTooltip:AddLine(("Only buy listings up to %s each."):format(ns.Money(math.floor(e.maxUnit))), 1, 0.82, 0)
+  if ns.flips.scannedAt then
+    GameTooltip:AddLine(("From the full scan %d min ago; some listings may be gone."):format(
+      math.floor((time() - ns.flips.scannedAt) / 60)), 0.6, 0.6, 0.6, true)
+  end
+  GameTooltip:AddLine("Shift-click to link in chat.", 0.5, 0.5, 0.5)
+  GameTooltip:Show()
+end
+
+local function InitFlipRow(row, e)
+  if not row.cells then BuildCells(row, FLIP_COLS, ShowFlipTooltip) end
+  row.data = e
+  row.icon:SetTexture(e.icon or 134400)
+  row.cells.item:SetText(e.link or e.name)
+  row.cells.listings:SetText(e.listings)
+  row.cells.qty:SetText(e.qty)
+  row.cells.maxbuy:SetText(ns.Money(math.floor(e.maxUnit)))
+  row.cells.vendor:SetText(ns.Money(e.vendorUnit))
+  row.cells.cost:SetText(ns.Money(e.cost))
+  row.cells.profit:SetText("|cff00ff00" .. ns.Money(e.profit) .. "|r")
+end
+
+---------------------------------------------------------------------------
+-- Window
+---------------------------------------------------------------------------
+local function TableWidth(cols)
+  local w = 30
+  for _, c in ipairs(cols) do w = w + c.width end
+  return w
+end
+
+-- A panel with column headers and a scrolling list, filling the window between tabs and footer.
+local function CreateTable(parent, cols, initializer)
+  local panel = CreateFrame("Frame", nil, parent)
+  panel:SetPoint("TOPLEFT", 0, -56)
+  panel:SetPoint("BOTTOMRIGHT", 0, 40)
+
+  local x = 16
+  for _, col in ipairs(cols) do
+    local h = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    h:SetPoint("TOPLEFT", x, 0)
+    h:SetWidth(col.width - 6)
+    h:SetJustifyH(col.justify)
+    h:SetText(col.label)
+    x = x + col.width
+  end
+
+  local scrollBox = CreateFrame("Frame", nil, panel, "WowScrollBoxList")
+  scrollBox:SetPoint("TOPLEFT", 12, -16)
+  scrollBox:SetPoint("BOTTOMRIGHT", -30, 0)
+  local scrollBar = CreateFrame("EventFrame", nil, panel, "MinimalScrollBar")
+  scrollBar:SetPoint("TOPLEFT", scrollBox, "TOPRIGHT", 6, 0)
+  scrollBar:SetPoint("BOTTOMLEFT", scrollBox, "BOTTOMRIGHT", 6, 0)
+
+  local view = CreateScrollBoxListLinearView()
+  view:SetElementExtent(ROW_H)
+  view:SetElementInitializer("Button", initializer)
+  ScrollUtil.InitScrollBoxListWithScrollBar(scrollBox, scrollBar, view)
+  panel.scrollBox = scrollBox
+
+  panel.empty = panel:CreateFontString(nil, "OVERLAY", "GameFontDisableLarge")
+  panel.empty:SetPoint("CENTER", scrollBox, "CENTER")
+  panel.empty:SetWidth(TableWidth(cols) - 80)
+  return panel
+end
+
+local function SimpleButton(parent, text, width, onClick, tipTitle, tipText)
+  local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+  b:SetSize(width, 22)
+  b:SetText(text)
+  b:SetScript("OnClick", onClick)
+  if tipTitle then
+    b:SetScript("OnEnter", function(self)
+      GameTooltip:SetOwner(self, "ANCHOR_TOP")
+      GameTooltip:AddLine(tipTitle)
+      GameTooltip:AddLine(tipText, 1, 1, 1, true)
+      GameTooltip:Show()
+    end)
+    b:SetScript("OnLeave", GameTooltip_Hide)
+  end
+  return b
+end
+
 local function CreateUI()
-  local width = 30
-  for _, c in ipairs(COLS) do width = width + c.width end
+  local width = math.max(TableWidth(COLS), TableWidth(FLIP_COLS))
 
   frame = CreateFrame("Frame", "CraftShufflerFrame", UIParent, "BasicFrameTemplateWithInset")
-  frame:SetSize(width + 20, 460)
+  frame:SetSize(width + 20, 480)
   frame:SetPoint("CENTER")
   frame:SetMovable(true)
   frame:EnableMouse(true)
@@ -178,34 +285,23 @@ local function CreateUI()
   frame.title:SetPoint("TOP", 0, -5)
   frame.title:SetText("CraftShuffler v" .. ns.VERSION)
 
-  -- Column headers
-  local x = 16
-  for _, col in ipairs(COLS) do
-    local h = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    h:SetPoint("TOPLEFT", x, -34)
-    h:SetWidth(col.width - 6)
-    h:SetJustifyH(col.justify)
-    h:SetText(col.label)
-    x = x + col.width
-  end
+  -- Tabs
+  frame.tabButtons = {
+    crafts = SimpleButton(frame, "Crafts", 100, function() ns.ShowTab("crafts") end),
+    flips = SimpleButton(frame, "Vendor flips", 110, function() ns.ShowTab("flips") end),
+  }
+  frame.tabButtons.crafts:SetPoint("TOPLEFT", 12, -28)
+  frame.tabButtons.flips:SetPoint("LEFT", frame.tabButtons.crafts, "RIGHT", 4, 0)
 
-  local scrollBox = CreateFrame("Frame", nil, frame, "WowScrollBoxList")
-  scrollBox:SetPoint("TOPLEFT", 12, -50)
-  scrollBox:SetPoint("BOTTOMRIGHT", -30, 40)
-  local scrollBar = CreateFrame("EventFrame", nil, frame, "MinimalScrollBar")
-  scrollBar:SetPoint("TOPLEFT", scrollBox, "TOPRIGHT", 6, 0)
-  scrollBar:SetPoint("BOTTOMLEFT", scrollBox, "BOTTOMRIGHT", 6, 0)
+  frame.panels = {
+    crafts = CreateTable(frame, COLS, InitRow),
+    flips = CreateTable(frame, FLIP_COLS, InitFlipRow),
+  }
 
-  local view = CreateScrollBoxListLinearView()
-  view:SetElementExtent(ROW_H)
-  view:SetElementInitializer("Button", InitRow)
-  ScrollUtil.InitScrollBoxListWithScrollBar(scrollBox, scrollBar, view)
-  frame.scrollBox = scrollBox
-
-  -- Footer: filter checkbox, refresh button, summary
-  local cb = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
+  -- Footer (crafts tab): filter checkbox
+  local cb = CreateFrame("CheckButton", nil, frame.panels.crafts, "UICheckButtonTemplate")
   cb:SetSize(24, 24)
-  cb:SetPoint("BOTTOMLEFT", 12, 10)
+  cb:SetPoint("TOPLEFT", frame.panels.crafts, "BOTTOMLEFT", 12, -6)
   cb.text = cb:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   cb.text:SetPoint("LEFT", cb, "RIGHT", 2, 0)
   cb.text:SetText("Only show Shuffle me!")
@@ -215,42 +311,34 @@ local function CreateUI()
   end)
   frame.onlyShuffle = cb
 
-  local refresh = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-  refresh:SetSize(90, 22)
-  refresh:SetPoint("BOTTOMRIGHT", -12, 10)
-  refresh:SetText("Refresh")
-  refresh:SetScript("OnClick", function()
-    ns.ScanOpenProfession()
-    ns.Evaluate()
+  -- Footer: buttons act on the current tab
+  local refresh = SimpleButton(frame, "Refresh", 90, function()
+    if ns.Settings().tab == "flips" then
+      if not ns.ScanReplicateForFlips(true) then
+        ns.Print("no full scan data available - at the AH, run a full scan in Auctionator first.")
+      end
+    else
+      ns.ScanOpenProfession()
+      ns.Evaluate()
+    end
   end)
+  refresh:SetPoint("BOTTOMRIGHT", -12, 10)
+
+  local shop = SimpleButton(frame, "Shopping list", 110, function()
+    if ns.Settings().tab == "flips" then ns.CreateFlipsShoppingList() else ns.CreateShoppingList() end
+  end, "Auctionator shopping list",
+    "Crafts tab: the 'CraftShuffler' list of reagents for your Shuffle me! recipes, capped at the most you can pay. "
+    .. "Vendor flips tab: the 'CraftShuffler Flips' list, capped below vendor price. Buy every listing up to the cap.")
+  shop:SetPoint("RIGHT", refresh, "LEFT", -6, 0)
 
   frame.summary = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  local shop = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-  shop:SetSize(110, 22)
-  shop:SetPoint("RIGHT", refresh, "LEFT", -6, 0)
-  shop:SetText("Shopping list")
-  shop:SetScript("OnClick", function() ns.CreateShoppingList() end)
-  shop:SetScript("OnEnter", function(self)
-    GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:AddLine("Auctionator shopping list")
-    GameTooltip:AddLine("Creates the 'CraftShuffler' list: every reagent of your Shuffle me! recipes, "
-      .. "capped at the most you can pay and still profit. Buy every listing up to that price.", 1, 1, 1, true)
-    GameTooltip:Show()
-  end)
-  shop:SetScript("OnLeave", GameTooltip_Hide)
-
   frame.summary:SetPoint("RIGHT", shop, "LEFT", -10, 0)
   frame.summary:SetJustifyH("RIGHT")
-
-  frame.empty = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableLarge")
-  frame.empty:SetPoint("CENTER", scrollBox, "CENTER")
-  frame.empty:SetWidth(width - 80)
 
   frame:SetScript("OnShow", function() ns.Evaluate() end)
 end
 
-function ns.RefreshUI()
-  if not frame or not frame:IsShown() then return end
+local function RefreshCrafts(panel)
   local onlyShuffle = ns.Settings().onlyShuffle
   frame.onlyShuffle:SetChecked(onlyShuffle)
 
@@ -259,20 +347,56 @@ function ns.RefreshUI()
     counts[r.status] = counts[r.status] + 1
     if not onlyShuffle or r.status == ns.STATUS.SHUFFLE then table.insert(list, r) end
   end
-  frame.scrollBox:SetDataProvider(CreateDataProvider(list), ScrollBoxConstants.RetainScrollPosition)
+  panel.scrollBox:SetDataProvider(CreateDataProvider(list), ScrollBoxConstants.RetainScrollPosition)
 
   frame.summary:SetText(("|cff00ff00%d shuffle|r  |  %d no profit  |  |cffff9900%d no price|r"):format(
     counts[1], counts[2], counts[3]))
 
   if #list > 0 then
-    frame.empty:SetText("")
+    panel.empty:SetText("")
   elseif #ns.results == 0 then
-    frame.empty:SetText("No recipes recorded yet.\nOpen each of your profession windows once.")
+    panel.empty:SetText("No recipes recorded yet.\nOpen each of your profession windows once.")
   elseif not ns.AuctionatorAPI() then
-    frame.empty:SetText("Auctionator is not loaded.")
+    panel.empty:SetText("Auctionator is not loaded.")
   else
-    frame.empty:SetText("Nothing to shuffle right now.\nRun a full Auctionator scan at the auction house.")
+    panel.empty:SetText("Nothing to shuffle right now.\nRun a full Auctionator scan at the auction house.")
   end
+end
+
+local function RefreshFlips(panel)
+  local f = ns.flips
+  panel.scrollBox:SetDataProvider(CreateDataProvider(f.items), ScrollBoxConstants.RetainScrollPosition)
+  local total = 0
+  for _, e in ipairs(f.items) do total = total + e.profit end
+  if f.scannedAt then
+    frame.summary:SetText(("%d flips  |  |cff00ff00%s|r total  |  scanned %d min ago"):format(
+      #f.items, ns.Money(total), math.floor((time() - f.scannedAt) / 60)))
+  else
+    frame.summary:SetText("")
+  end
+  if ns.flipScanRunning then
+    panel.empty:SetText("Scanning listings...")
+  elseif #f.items > 0 then
+    panel.empty:SetText("")
+  elseif not f.scannedAt then
+    panel.empty:SetText("No full scan yet.\nAt the AH, run a full scan in Auctionator; flips appear when it finishes.")
+  else
+    panel.empty:SetText("No listings below vendor price in the last full scan.")
+  end
+end
+
+function ns.RefreshUI()
+  if not frame or not frame:IsShown() then return end
+  local tab = ns.Settings().tab == "flips" and "flips" or "crafts"
+  for name, panel in pairs(frame.panels) do panel:SetShown(name == tab) end
+  for name, b in pairs(frame.tabButtons) do b:SetEnabled(name ~= tab) end -- active tab looks pressed
+  if tab == "flips" then RefreshFlips(frame.panels.flips) else RefreshCrafts(frame.panels.crafts) end
+end
+
+function ns.ShowTab(tab)
+  ns.Settings().tab = tab
+  if not frame then CreateUI() end
+  if frame:IsShown() then ns.RefreshUI() else frame:Show() end
 end
 
 function ns.ToggleUI()
