@@ -27,10 +27,17 @@ C_Item = {
     return i[1], "[" .. i[1] .. "]", 1, 1, 1, "", "", 1, "", 1, i[2], 0, 0, i[3]
   end,
   RequestLoadItemDataByID = function() end,
+  GetItemNameByID = function(id) return items[id] and items[id][1] end,
 }
+local createdLists = {}
 Auctionator = { API = { v1 = {
   GetAuctionPriceByItemID = function(_, id) return ah[id] end,
   GetVendorPriceByItemID = function(_, id) return vendor[id] end,
+  -- Same shape as Auctionator's real search strings; maxPrice is stored in gold.
+  ConvertToSearchString = function(_, t)
+    return ('"%s";;;;;;;;%s;;;;'):format(t.searchString, t.maxPrice and tostring(t.maxPrice / 10000) or "")
+  end,
+  CreateShoppingList = function(_, name, strings) createdLists[name] = strings end,
 } } }
 C_TradeSkillUI = {
   IsTradeSkillReady = function() return true end,
@@ -52,15 +59,15 @@ C_TradeSkillUI = {
 }
 
 local ns = {}
-for _, f in ipairs({ "Core.lua", "Pricing.lua", "Scanner.lua" }) do
+for _, f in ipairs({ "Core.lua", "Pricing.lua", "AuctionHouse.lua", "Scanner.lua" }) do
   assert(loadfile(ADDON_DIR .. "/" .. f))("CraftShuffler", ns)
 end
 print = function() end -- silence addon chat output
 
 local function Setup(scenario)
   items, ah, vendor, recipes = scenario.items, scenario.ah, scenario.vendor or {}, scenario.recipes
-  CraftShufflerDB = { chars = {}, settings = {
-    useVendorReagentPrice = true, craftReagents = true, includeSoulbound = false, minProfit = 1 } }
+  CraftShufflerDB = { chars = {}, deposits = {}, settings = {
+    useVendorReagentPrice = true, craftReagents = true, includeSoulbound = false, minProfit = 1, ahDuration = 1 } }
   ns.ScanOpenProfession()
   flush()
 end
@@ -169,6 +176,41 @@ tests["auction value of the crafted item"] = function()
   assert(by.Shirt.auctionProfit == 380 - by.Shirt.cost)
   assert(by.Thread.auctionValue == 250, "auction value counts the full output quantity (5 x 50)")
   assert(by.Pants.auctionValue == nil and by.Pants.auctionProfit == nil, "never listed -> no auction value")
+end
+
+tests["AH vs vendor verdict with estimated and recorded deposits"] = function()
+  LINEN.ah = { [2589] = 20, [2996] = 60, [400] = 50, [2568] = 400, [300] = 100 }
+  Setup(LINEN)
+  local by = ByName()
+  -- Shirt: vendor 200, AH 400 -> net 380; estimated deposit 15% of 200 = 30 -> p = 30 / (180 + 30)
+  local shirt = by.Shirt
+  assert(shirt.saleVerdict == "ah" and shirt.depositEstimated and shirt.deposit == 30)
+  assert(math.abs(shirt.breakEvenSell - 30 / 210) < 1e-9)
+  assert(by.Pants.saleVerdict == "vendor", "AH net 95 < vendor 500")
+  assert(by.Bolt.saleVerdict == "ah", "verdict is known even though bolt is unprofitable to craft")
+
+  CraftShufflerDB.deposits[2568] = { [1] = 10 }
+  shirt = ByName().Shirt
+  assert(not shirt.depositEstimated and math.abs(shirt.breakEvenSell - 10 / 190) < 1e-9)
+
+  CraftShufflerDB.settings.ahDuration = 3 -- 48h: no recorded value, estimate x4
+  assert(ByName().Shirt.deposit == 120)
+end
+
+tests["max reagent prices and Auctionator shopping list"] = function()
+  LINEN.ah = { [2589] = 20, [2996] = 60, [400] = 50 }
+  Setup(LINEN)
+  local by = ByName()
+  -- Shirt: buys 6 cloth for 120, vendor 200, min profit 1 -> slack 79 -> cap floor(20 + 79 / 6) = 33
+  assert(by.Shirt.plan.buys[1].maxPrice == 33)
+  -- Pants: buys 4 cloth for 80, vendor 500 -> slack 419 -> cap floor(20 + 419 / 4) = 124
+  assert(by.Pants.plan.buys[1].maxPrice == 124)
+  local caps = ns.CollectShoppingCaps()
+  assert(#caps == 1 and caps[1].name == "Linen Cloth" and caps[1].maxPrice == 124 and caps[1].recipes == 2)
+
+  ns.CreateShoppingList()
+  local list = createdLists[ns.SHOPPING_LIST_NAME]
+  assert(list and #list == 1 and list[1] == '"Linen Cloth";;;;;;;;0.0124;;;;', tostring(list and list[1]))
 end
 
 local names = {}
