@@ -13,6 +13,7 @@ local DEFAULTS = {
   includeSoulbound = false,     -- also evaluate Bind-on-Pickup / account-bound crafted items
   onlyShuffle = false,          -- UI filter: show only "Shuffle me!" rows
   minProfit = 1,                -- copper; vendor value - reagent cost must be >= this to be flagged
+  flipMinProfit = 1,            -- copper; a listing must make at least this when vendored to count as a flip
   ahDuration = 1,               -- auction duration used for deposits: 1 = 12h, 2 = 24h, 3 = 48h
   chatAlert = true,             -- print a summary after each Auctionator scan
 }
@@ -68,6 +69,8 @@ local function RegisterAuctionatorCallback()
     local ok, err = pcall(api.RegisterForDBUpdate, ns.CALLER_ID, function()
       ns.announceNextEval = true
       ns.RequestEvaluate(1)
+      -- After a full scan the game still holds every listing; look for ones below vendor price.
+      if ns.ahOpen then C_Timer.After(1, function() ns.ScanReplicateForFlips() end) end
     end)
     if not ok then Print("Could not register for Auctionator updates:", tostring(err)) end
   end
@@ -79,12 +82,14 @@ frame:SetScript("OnEvent", function(_, event, arg1)
     CraftShufflerDB.chars = CraftShufflerDB.chars or {}
     CraftShufflerDB.settings = CraftShufflerDB.settings or {}
     CraftShufflerDB.deposits = CraftShufflerDB.deposits or {}   -- [itemID][duration] = per-unit deposit
+    CraftShufflerDB.flips = CraftShufflerDB.flips or {}         -- [realm] = last vendor flips scan
     for k, v in pairs(DEFAULTS) do
       if CraftShufflerDB.settings[k] == nil then CraftShufflerDB.settings[k] = v end
     end
   elseif event == "PLAYER_LOGIN" then
     RegisterAuctionatorCallback()
     ns.InstallTooltipHook()
+    ns.LoadSavedFlips()
     ns.RequestEvaluate(3)
   elseif event == "TRADE_SKILL_SHOW" or event == "TRADE_SKILL_LIST_UPDATE"
       or event == "TRADE_SKILL_DATA_SOURCE_CHANGED" then
@@ -111,6 +116,8 @@ local function Help()
   print("  /shuffle soulbound - toggle including soulbound crafts (" .. OnOff(s.includeSoulbound) .. ")")
   print("  /shuffle minprofit <gold> - minimum profit per craft, e.g. 0.5 = 50s (now " .. ns.Money(s.minProfit) .. ")")
   print("  /shuffle shop - create an Auctionator shopping list of reagents with max prices")
+  print("  /shuffle flips - show AH listings cheaper than their vendor price (needs a full Auctionator scan)")
+  print("  /shuffle flipmin <gold> - minimum profit per flip listing (now " .. ns.Money(s.flipMinProfit) .. ")")
   print("  /shuffle duration 12|24|48 - auction duration for deposits (now " .. ns.DURATION_HOURS[s.ahDuration] .. "h)")
   print("  /shuffle reset - forget this character's stored recipes")
   print("Open each profession window once so its recipes are recorded.")
@@ -160,6 +167,19 @@ SlashCmdList.CRAFTSHUFFLER = function(msg)
     end
   elseif cmd == "shop" then
     ns.CreateShoppingList()
+  elseif cmd == "flips" then
+    ns.ShowTab("flips")
+    if not ns.ScanReplicateForFlips(true) and not ns.flips.scannedAt then
+      Print("no full scan data yet - at the AH, run a full scan in Auctionator's Auctionator tab.")
+    end
+  elseif cmd == "flipmin" then
+    local gold = tonumber(rest)
+    if not gold or gold < 0 then
+      Print("usage: /shuffle flipmin <gold>  (e.g. 0.01 = 1 silver)")
+    else
+      s.flipMinProfit = math.max(1, math.floor(gold * 10000 + 0.5))
+      Print("minimum flip profit set to " .. ns.Money(s.flipMinProfit) .. " (applies from the next scan)")
+    end
   elseif cmd == "duration" then
     local idx = ({ ["12"] = 1, ["24"] = 2, ["48"] = 3 })[rest]
     if not idx then

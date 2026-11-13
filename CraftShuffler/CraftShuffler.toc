@@ -9,5 +9,6 @@
 Core.lua
 Pricing.lua
 AuctionHouse.lua
+Flips.lua
 Scanner.lua
 UI.lua
