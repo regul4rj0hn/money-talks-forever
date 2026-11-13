@@ -3,12 +3,13 @@ local _, ns = ...
 
 local ROW_H = 20
 local COLS = {
-  { key = "item",   label = "Crafted item", width = 230, justify = "LEFT" },
-  { key = "prof",   label = "Profession",   width = 90,  justify = "LEFT" },
+  { key = "item",   label = "Crafted item", width = 210, justify = "LEFT" },
+  { key = "prof",   label = "Profession",   width = 80,  justify = "LEFT" },
   { key = "method", label = "Reagents",     width = 90,  justify = "LEFT" },
   { key = "cost",   label = "Reagent cost", width = 110, justify = "RIGHT" },
   { key = "vendor", label = "Vendor value", width = 110, justify = "RIGHT" },
   { key = "auction", label = "Auction value", width = 110, justify = "RIGHT" },
+  { key = "sellvia", label = "Sell via",     width = 80,  justify = "CENTER" },
   { key = "profit", label = "Profit",       width = 110, justify = "RIGHT" },
   { key = "status", label = "",             width = 90,  justify = "CENTER" },
 }
@@ -39,6 +40,14 @@ local function ShowRowTooltip(row)
   else
     GameTooltip:AddLine("Sell on AH: no Auctionator price for this item", 0.6, 0.6, 0.6)
   end
+  if d.saleVerdict == "ah" then
+    local dep = ns.Money(d.deposit) .. (d.depositEstimated and " est." or "")
+    GameTooltip:AddLine(("|cffffd100List it on the AH|r if it sells at least %d%% of the time (deposit %s, %dh)."):format(
+      math.ceil((d.breakEvenSell or 0) * 100), dep, ns.DURATION_HOURS[ns.Settings().ahDuration]), 0.9, 0.9, 0.9, true)
+    GameTooltip:AddLine("Unsold auctions come back by mail and can still be vendored.", 0.6, 0.6, 0.6, true)
+  elseif d.auctionValue then
+    GameTooltip:AddLine("Vendor it: the AH price after the cut doesn't beat the vendor price.", 0.9, 0.9, 0.9, true)
+  end
   GameTooltip:AddLine(" ")
   local plan = d.plan
   if plan then
@@ -46,6 +55,9 @@ local function ShowRowTooltip(row)
     GameTooltip:AddLine("1. Buy:", 1, 0.82, 0)
     for _, b in ipairs(plan.buys) do
       local tag = b.source == "vendor" and " |cff999999(vendor)|r" or " |cff999999(AH)|r"
+      if b.maxPrice and b.source ~= "vendor" then
+        tag = tag .. (" |cffffd100max %s|r"):format(ns.Money(b.maxPrice))
+      end
       GameTooltip:AddDoubleLine(("    %dx %s"):format(b.qty, b.name or "?"), ns.Money(b.total) .. tag, W, W, W, 1, 1, 1)
     end
     if d.cost and plan.buyTotal > d.cost + 0.5 then
@@ -128,6 +140,13 @@ local function InitRow(row, d)
   row.cells.vendor:SetText(ns.Money(d.vendorValue))
   -- Gold when selling on the AH (after the cut) beats vendoring.
   local ahBetter = d.auctionNet and d.auctionNet > (d.vendorValue or 0)
+  if d.saleVerdict == "ah" then
+    row.cells.sellvia:SetText(("|cffffd100AH %d%%+|r"):format(math.ceil((d.breakEvenSell or 0) * 100)))
+  elseif d.saleVerdict == "vendor" then
+    row.cells.sellvia:SetText("|cffccccccvendor|r")
+  else
+    row.cells.sellvia:SetText("")
+  end
   row.cells.auction:SetText((ahBetter and "|cffffd100" or "") .. ns.Money(d.auctionValue) .. (ahBetter and "|r" or ""))
   if d.profit then
     local color = d.profit > 0 and "|cff00ff00" or "|cffff4040"
@@ -206,7 +225,21 @@ local function CreateUI()
   end)
 
   frame.summary = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  frame.summary:SetPoint("RIGHT", refresh, "LEFT", -10, 0)
+  local shop = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+  shop:SetSize(110, 22)
+  shop:SetPoint("RIGHT", refresh, "LEFT", -6, 0)
+  shop:SetText("Shopping list")
+  shop:SetScript("OnClick", function() ns.CreateShoppingList() end)
+  shop:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:AddLine("Auctionator shopping list")
+    GameTooltip:AddLine("Creates the 'CraftShuffler' list: every reagent of your Shuffle me! recipes, "
+      .. "capped at the most you can pay and still profit. Buy every listing up to that price.", 1, 1, 1, true)
+    GameTooltip:Show()
+  end)
+  shop:SetScript("OnLeave", GameTooltip_Hide)
+
+  frame.summary:SetPoint("RIGHT", shop, "LEFT", -10, 0)
   frame.summary:SetJustifyH("RIGHT")
 
   frame.empty = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableLarge")
