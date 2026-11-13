@@ -44,6 +44,8 @@ Or copy the `CraftShuffler` folder from this repo. Requires
 | `/shuffle soulbound` | Toggle including soulbound crafts (default off) |
 | `/shuffle minprofit <gold>` | Minimum profit per craft to be flagged, e.g. `0.5` = 50s |
 | `/shuffle shop` | Create the Auctionator shopping list `CraftShuffler` with max prices (same as the **Shopping list** button) |
+| `/shuffle flips` | Open the Vendor flips tab (AH listings cheaper than their vendor price) |
+| `/shuffle flipmin <gold>` | Minimum profit per flip listing, e.g. `0.01` = 1s |
 | `/shuffle duration 12\|24\|48` | Auction duration used for deposits (default 12h) |
 | `/shuffle reset` | Forget this character's recorded recipes |
 
@@ -76,6 +78,22 @@ price**, not just one craft's worth. Reagents bought from NPC vendors are printe
 
 Auctionator applies the cap to an item's cheapest listing. When you open an item, more expensive listings are still
 shown, so stop buying at the max price.
+
+## Vendor flips
+
+Sometimes items are listed on the AH for less than a vendor pays for them. Buy them and sell them to any NPC for a
+risk-free profit, no crafting needed. The **Vendor flips** tab (`/shuffle flips`) lists every such item from the last
+**full** Auctionator scan. For each item it shows the number of listings, the quantity, the most to pay per unit, the
+total cost and the profit.
+
+- At the AH, run a full scan from Auctionator's *Auctionator* tab. Auctionator allows one every 15 minutes. When the
+  scan finishes, CraftShuffler reads every listing the game downloaded and compares its unit price with the vendor
+  price. Bid-only and your own auctions are skipped. Incremental scans don't download individual listings, so they
+  don't update flips.
+- **Shopping list** on this tab creates the Auctionator list `CraftShuffler Flips`, capping each item at the highest
+  profitable unit price.
+- Results are a snapshot of the scan, so other players may buy some listings first. The tab shows how old the scan is.
+- `/shuffle flipmin <gold>` sets the minimum profit per listing (default 1 copper).
 
 ## AH or vendor?
 

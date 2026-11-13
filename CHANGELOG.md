@@ -6,6 +6,14 @@ Each version is a [GitHub release](https://github.com/regul4rj0hn/craft-shuffler
 
 ## [Unreleased]
 
+### Added
+- **Vendor flips** tab: AH listings priced below what a vendor pays, found in Auctionator's full scan data. Shows
+  listings, quantity, the max price to pay each, total cost and profit, sorted by profit.
+- `CraftShuffler Flips` Auctionator shopping list, `/shuffle flips` and `/shuffle flipmin <gold>`.
+
+### Changed
+- The results window now has **Crafts** and **Vendor flips** tabs. Shopping list and Refresh act on the current tab.
+
 ## [0.1.0] - 2026-11-13
 
 First version.
