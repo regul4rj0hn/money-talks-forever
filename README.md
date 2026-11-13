@@ -27,7 +27,10 @@ Prices are re-evaluated automatically whenever Auctionator finishes a scan.
 
 ## Install
 
-Copy the `CraftShuffler` folder to `World of Warcraft\_forever_\Interface\AddOns\`. Requires
+Download `CraftShuffler-vX.Y.Z.zip` from [Releases](https://github.com/regul4rj0hn/craft-shuffler/releases) and
+extract it into `World of Warcraft\_forever_\Interface\AddOns\` (the zip contains the `CraftShuffler` folder).
+To try an older or newer version, replace that folder with the one from another release. Your saved data is kept.
+Or copy the `CraftShuffler` folder from this repo. Requires
 [Auctionator](https://www.curseforge.com/wow/addons/auctionator).
 
 ## Usage
@@ -91,6 +94,19 @@ depend on reagent cost.
 ## Development
 
 `lua tests/run.lua` runs offline tests of the scanning and pricing logic against a mocked WoW API.
+
+### Releases
+
+Versions follow semver, starting at 0.x until the addon is proven in game. Add every change to `## [Unreleased]` in
+[CHANGELOG.md](CHANGELOG.md), then:
+
+```
+scripts/release.sh patch|minor|major      # bump TOC version, date the changelog, commit, tag vX.Y.Z
+git push origin main --follow-tags        # or pass --push to the script
+```
+
+Pushing a `v*` tag runs [the release workflow](.github/workflows/release.yml). It runs the tests, checks the tag
+matches the TOC version, and publishes a GitHub release with the zip and that version's changelog notes.
 
 ## Notes
 
