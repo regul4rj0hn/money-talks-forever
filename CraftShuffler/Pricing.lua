@@ -58,9 +58,101 @@ local function ItemName(itemID)
   return name or ("item:" .. itemID)
 end
 
+-- Pricing context for one evaluation pass:
+--   byOutput[itemID] = { recipe, ... }  recipes you know that produce itemID
+--   memo[itemID]     = cached resolved price
+--   visiting[itemID] = true while resolving (cycle guard, e.g. cloth <-> bolt conversions)
+local function NewContext()
+  local ctx = { byOutput = {}, memo = {}, visiting = {} }
+  for _, r in pairs(ns.CharStore().recipes) do
+    if r.outputItemID then
+      ctx.byOutput[r.outputItemID] = ctx.byOutput[r.outputItemID] or {}
+      table.insert(ctx.byOutput[r.outputItemID], r)
+    end
+  end
+  return ctx
+end
+
+local CostReagents -- forward declaration (mutual recursion)
+
+-- Cheapest per-unit price for a reagent: buy it (AH / vendor) or craft it from your own known recipes.
+-- Returns a table { unit, source, buyUnit, buySource, craftUnit, craftName } (unit may be nil) and a
+-- "cut" flag that is true when a recipe cycle was cut short (such results are not memoized).
+local function ResolveUnitPrice(itemID, ctx)
+  local cached = ctx.memo[itemID]
+  if cached then return cached, false end
+
+  local p = {}
+  p.buyUnit, p.buySource = ns.GetReagentUnitPrice(itemID)
+
+  local cut = false
+  local recipes = ns.Settings().craftReagents and ctx.byOutput[itemID]
+  if recipes then
+    if ctx.visiting[itemID] then
+      cut = true
+    else
+      ctx.visiting[itemID] = true
+      for _, rec in ipairs(recipes) do
+        local cost, _, missing, subCut = CostReagents(rec, ctx)
+        cut = cut or subCut
+        if cost and #missing == 0 then
+          local perUnit = cost / math.max(1, rec.qtyMin or 1)
+          if not p.craftUnit or perUnit < p.craftUnit then
+            p.craftUnit, p.craftName = perUnit, rec.name
+          end
+        end
+      end
+      ctx.visiting[itemID] = nil
+    end
+  end
+
+  if p.craftUnit and (not p.buyUnit or p.craftUnit < p.buyUnit) then
+    p.unit, p.source = p.craftUnit, "craft"
+  else
+    p.unit, p.source = p.buyUnit, p.buySource
+  end
+
+  if not cut then ctx.memo[itemID] = p end
+  return p, cut
+end
+
+-- Total cost of one craft of recipe r. Returns cost (nil if anything is unpriced), breakdown, missing, cut.
+CostReagents = function(r, ctx)
+  local cost, breakdown, missing, cut = 0, {}, {}, false
+  for _, slot in ipairs(r.reagents) do
+    if slot.currencyID and #slot.items == 0 then
+      local cinfo = C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo(slot.currencyID)
+      local label = (cinfo and cinfo.name) or ("currency:" .. slot.currencyID)
+      table.insert(missing, label)
+      table.insert(breakdown, { name = label, qty = slot.qty })
+    else
+      local best, bestID
+      for _, id in ipairs(slot.items) do
+        local p, subCut = ResolveUnitPrice(id, ctx)
+        cut = cut or subCut
+        if p.unit and (not best or p.unit < best.unit) then best, bestID = p, id end
+      end
+      local shownID = bestID or slot.items[1]
+      local line = { itemID = shownID, name = ItemName(shownID), qty = slot.qty }
+      if best then
+        line.unit, line.source = best.unit, best.source
+        line.buyUnit, line.buySource = best.buyUnit, best.buySource
+        line.craftUnit, line.craftName = best.craftUnit, best.craftName
+        line.total = best.unit * slot.qty
+        cost = cost + line.total
+      else
+        table.insert(missing, line.name)
+      end
+      table.insert(breakdown, line)
+    end
+  end
+  return (#missing == 0) and cost or nil, breakdown, missing, cut
+end
+
 -- Returns a result row, or nil if the recipe is excluded (soulbound output).
-function ns.EvaluateRecipe(recipeID, r)
+function ns.EvaluateRecipe(recipeID, r, ctx)
   local S = ns.STATUS
+  ctx = ctx or NewContext()
   local res = {
     recipeID = recipeID,
     name = r.name,
@@ -87,32 +179,14 @@ function ns.EvaluateRecipe(recipeID, r)
   res.itemLink, res.icon, res.bindType = itemLink, icon, bindType
   res.vendorValue = (sellPrice or 0) * res.qty
 
-  local cost = 0
-  for _, slot in ipairs(r.reagents) do
-    if slot.currencyID and #slot.items == 0 then
-      local cinfo = C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo(slot.currencyID)
-      local label = (cinfo and cinfo.name) or ("currency:" .. slot.currencyID)
-      table.insert(res.missing, label)
-      table.insert(res.breakdown, { name = label, qty = slot.qty })
-    else
-      local best, bestID, bestSrc
-      for _, id in ipairs(slot.items) do
-        local p, src = ns.GetReagentUnitPrice(id)
-        if p and (not best or p < best) then best, bestID, bestSrc = p, id, src end
-      end
-      local shownID = bestID or slot.items[1]
-      local line = { itemID = shownID, name = ItemName(shownID), qty = slot.qty, unit = best, source = bestSrc }
-      table.insert(res.breakdown, line)
-      if best then
-        line.total = best * slot.qty
-        cost = cost + line.total
-      else
-        table.insert(res.missing, line.name)
-      end
-    end
-  end
+  -- Don't let a reagent be priced by crafting it back out of this recipe's own output.
+  local wasVisiting = ctx.visiting[r.outputItemID]
+  ctx.visiting[r.outputItemID] = true
+  local cost
+  cost, res.breakdown, res.missing = CostReagents(r, ctx)
+  ctx.visiting[r.outputItemID] = wasVisiting
 
-  if #res.missing > 0 then
+  if not cost then
     res.status = S.MISSING
     return res
   end
@@ -138,8 +212,9 @@ function ns.Evaluate()
   if not CraftShufflerDB then return end
   ns.waitingForItems = false
   local results, flagged, shuffleCount = {}, {}, 0
+  local ctx = NewContext()
   for recipeID, r in pairs(ns.CharStore().recipes) do
-    local res = ns.EvaluateRecipe(recipeID, r)
+    local res = ns.EvaluateRecipe(recipeID, r, ctx)
     if res then
       table.insert(results, res)
       if res.status == ns.STATUS.SHUFFLE then
