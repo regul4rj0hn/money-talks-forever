@@ -3,8 +3,9 @@ local _, ns = ...
 
 local ROW_H = 20
 local COLS = {
-  { key = "item",   label = "Crafted item", width = 250, justify = "LEFT" },
+  { key = "item",   label = "Crafted item", width = 230, justify = "LEFT" },
   { key = "prof",   label = "Profession",   width = 90,  justify = "LEFT" },
+  { key = "method", label = "Reagents",     width = 90,  justify = "LEFT" },
   { key = "cost",   label = "Reagent cost", width = 110, justify = "RIGHT" },
   { key = "vendor", label = "Vendor value", width = 110, justify = "RIGHT" },
   { key = "profit", label = "Profit",       width = 110, justify = "RIGHT" },
@@ -26,14 +27,42 @@ local function ShowRowTooltip(row)
   GameTooltip:SetItemByID(d.itemID)
   GameTooltip:AddLine(" ")
   GameTooltip:AddLine(("Recipe: %s (yields %d)"):format(d.name or "?", d.qty or 1), 1, 0.82, 0)
-  for _, b in ipairs(d.breakdown or {}) do
-    local tag = (b.source == "vendor" and " |cff999999(vendor)|r") or (b.source == "craft" and " |cff66ccff(craft)|r") or ""
-    local right = b.total and (ns.Money(b.total) .. tag) or "|cffff9900no price|r"
-    GameTooltip:AddDoubleLine(("  %dx %s"):format(b.qty, b.name or "?"), right, 0.9, 0.9, 0.9, 1, 1, 1)
-    if b.craftUnit then
-      -- Show both options so you can see whether buying or crafting this reagent is cheaper.
-      GameTooltip:AddDoubleLine("      buy / craft each",
-        ns.Money(b.buyUnit) .. "  /  " .. ns.Money(b.craftUnit), 0.6, 0.6, 0.6, 0.7, 0.7, 0.7)
+  local plan = d.plan
+  if plan then
+    local W, G = 0.9, 0.6
+    GameTooltip:AddLine("1. Buy:", 1, 0.82, 0)
+    for _, b in ipairs(plan.buys) do
+      local tag = b.source == "vendor" and " |cff999999(vendor)|r" or " |cff999999(AH)|r"
+      GameTooltip:AddDoubleLine(("    %dx %s"):format(b.qty, b.name or "?"), ns.Money(b.total) .. tag, W, W, W, 1, 1, 1)
+    end
+    if d.cost and plan.buyTotal > d.cost + 0.5 then
+      GameTooltip:AddLine(("    Spend for one craft: %s. The listed cost of %s counts leftovers as savings for repeat crafts.")
+        :format(ns.Money(plan.buyTotal), ns.Money(d.cost)), G, G, G, true)
+    end
+    GameTooltip:AddLine("2. Craft, in this order:", 1, 0.82, 0)
+    for _, c in ipairs(plan.crafts) do
+      GameTooltip:AddLine(("    |cff66ccff%dx %s|r"):format(c.count, c.name or "?"))
+    end
+    GameTooltip:AddLine(("    |cff00ff00%dx %s|r  <- vendor this"):format(1, d.name or "?"))
+    if #plan.leftovers > 0 then
+      local parts = {}
+      for _, l in ipairs(plan.leftovers) do table.insert(parts, l.qty .. "x " .. (l.name or "?")) end
+      GameTooltip:AddLine("    leftover: " .. table.concat(parts, ", "), G, G, G, true)
+    end
+    if #plan.choices > 0 then
+      GameTooltip:AddLine(" ")
+      GameTooltip:AddDoubleLine("Craftable reagents", "buy / craft each", 1, 0.82, 0, 1, 0.82, 0)
+      for _, c in ipairs(plan.choices) do
+        local b, k = ns.Money(c.buyUnit), ns.Money(c.craftUnit)
+        if c.source == "craft" then k = "|cff66ccff[" .. k .. "]|r" else b = "|cff00ff00[" .. b .. "]|r" end
+        GameTooltip:AddDoubleLine("    " .. (c.name or "?"), b .. "  /  " .. k, W, W, W, 1, 1, 1)
+      end
+    end
+  else
+    -- No complete plan (some reagent has no price): show what is known and what is missing.
+    for _, b in ipairs(d.breakdown or {}) do
+      local right = b.total and ns.Money(b.total) or "|cffff9900no price|r"
+      GameTooltip:AddDoubleLine(("  %dx %s"):format(b.qty, b.name or "?"), right, 0.9, 0.9, 0.9, 1, 1, 1)
     end
   end
   GameTooltip:AddLine("Shift-click to link in chat.", 0.5, 0.5, 0.5)
@@ -77,6 +106,11 @@ local function InitRow(row, d)
   row.icon:SetTexture(d.icon or 134400) -- question mark fallback
   row.cells.item:SetText(d.itemLink or d.name or ("item:" .. d.itemID))
   row.cells.prof:SetText(d.profession or "")
+  if d.plan then
+    row.cells.method:SetText(d.usesCrafting and "|cff66ccffbuy + craft|r" or "|cffccccccbuy all|r")
+  else
+    row.cells.method:SetText("")
+  end
   row.cells.cost:SetText(d.status == ns.STATUS.MISSING and "|cffff9900?|r" or ns.Money(d.cost))
   row.cells.vendor:SetText(ns.Money(d.vendorValue))
   if d.profit then

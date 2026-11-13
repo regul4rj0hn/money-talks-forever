@@ -125,8 +125,9 @@ SlashCmdList.CRAFTSHUFFLER = function(msg)
     for _, r in ipairs(ns.results) do
       if r.status == ns.STATUS.SHUFFLE then
         n = n + 1
-        print(("  %s x%d  cost %s  vendor %s  |cff00ff00+%s|r"):format(
-          r.itemLink or r.name, r.qty, ns.Money(r.cost), ns.Money(r.vendorValue), ns.Money(r.profit)))
+        print(("  %s x%d  cost %s  vendor %s  |cff00ff00+%s|r%s"):format(
+          r.itemLink or r.name, r.qty, ns.Money(r.cost), ns.Money(r.vendorValue), ns.Money(r.profit),
+          r.usesCrafting and "  |cff66ccff(buy + craft)|r" or ""))
       end
     end
     Print(n .. " item(s) flagged 'Shuffle me!'")
