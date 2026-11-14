@@ -162,9 +162,34 @@ depend on reagent cost.
 
 ## Development
 
-`lua tests/run.lua` runs offline tests of the scanning and pricing logic against a mocked WoW API.
-`scripts/check-globals.sh` fails if the addon uses a global name that isn't a known WoW API. That catches calls to a
-`local function` defined further down a file, which only break in game. Both run before every release.
+### Code layout
+
+Files load in the order listed in `MoneyTalksForever.toc` and share the addon namespace `ns`.
+
+| File | What it does |
+|---|---|
+| `Util.lua` | Shared helpers: colors, money formatting, item info, bag scanning, debouncing |
+| `Events.lua` | One event frame: modules subscribe with `ns.On(event, fn)`; internal `MTF_*` messages use `ns.Fire` |
+| `Core.lua` | Saved data, settings defaults and the one-time import from CraftShuffler |
+| `Auctionator.lua` | All calls to Auctionator's API: prices, shopping lists, the scan-finished callback |
+| `Scanner.lua` | Records learned recipes and their required reagents when a profession window opens |
+| `Pricing.lua` | Recipe evaluation: buy vs craft per reagent, the step-by-step plan, "Shuffle me!" |
+| `AuctionHouse.lua` | AH deposits, the AH-or-vendor verdict and the reagent shopping list |
+| `Flips.lua` | Vendor flips: full scans and reading every AH listing |
+| `Tooltip.lua` | The "Shuffle me!" line on item tooltips |
+| `Ledger.lua` | Profit bookkeeping: stock at cost, crafts, sales, deposits, totals per period |
+| `LedgerAH.lua`, `LedgerVendor.lua`, `LedgerMail.lua` | What feeds the ledger: AH purchases and listings, vendor windows, AH sale mail |
+| `Commands.lua` | Slash commands (one table, which also generates `/mtf help`) and `/mtf debug` |
+| `UI/Widgets.lua` | Table, row and button helpers, and the tab registry |
+| `UI/*Tab.lua`, `UI/Window.lua` | One file per tab; the window is built from the registered tabs |
+
+### Tests and checks
+
+`lua tests/run.lua` runs offline tests against a mocked WoW API (`tests/mocks.lua`). The mock loads the addon files in
+TOC order and delivers events to every frame registered for them, like the game. `tests/test_ui.lua` builds the real
+window, opens every tab, draws rows, hovers every tooltip and clicks every button. `scripts/check-globals.sh` fails if
+the addon uses a global name that isn't a known WoW API. That catches calls to a `local function` defined further
+down a file, which only break in game. Both run before every release.
 
 ### Releases
 

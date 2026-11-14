@@ -6,11 +6,22 @@ Each version is a [GitHub release](https://github.com/regul4rj0hn/money-talks-fo
 
 ## [Unreleased]
 
+### Fixed
+- Opening a profession window while the game was still loading its recipe list could erase that profession's
+  recorded recipes.
+- The globals check before releases now also covers files in subfolders.
+
 ### Changed
 - **Renamed to Money Talks Forever.** The addon folder is now `MoneyTalksForever`, the command is `/mtf` (`/shuffle`
   still works), and the Auctionator shopping lists are `Money Talks Forever` and `Money Talks Forever Flips`. The
   GitHub repository is now `money-talks-forever`.
 - MIT license, also included in the release zip as `LICENSE.txt`.
+- Code reorganized into smaller modules (see *Code layout* in the README), with a single event dispatcher, shared
+  helpers and one file per window tab. Slash command help is generated from the command list.
+- Faster on busy auction houses: deposits are only measured for items without a known deposit, and only once per
+  burst of bag updates. The flips scan looks up each item once per pass instead of once per listing, and only reads
+  listing links for equippable items.
+- The crafting plan says "sell this (see above)" instead of "vendor this" when listing on the AH is the better bet.
 - Existing CraftShuffler data is imported on first login when the old addon is still installed, and CraftShuffler is
   then disabled.
 
