@@ -69,7 +69,8 @@ T.Test("full scan button, item data retry and timeout", function()
   ns.OnReplicateListUpdate()
   assert(not ns.fullScanPending)
   local p = ns.flipProgress
-  assert(p and p.phase == "loading" and p.skipped == 1 and p.attempt == 2, "waiting for item details before retry")
+  -- Items are looked up once per pass, so both listings of the not-yet-loaded shirt wait for the retry.
+  assert(p and p.phase == "loading" and p.skipped == 2 and p.attempt == 2, "waiting for item details before retry")
   flush() -- runs the retry
   assert(ns.flipProgress == nil, "idle again after the scan")
   C_Item.RequestLoadItemDataByID = function() end
@@ -99,10 +100,11 @@ T.Test("full scan button, item data retry and timeout", function()
 
   -- Reading progress reaches the total
   local seen = {}
-  ns.OnFlipProgress = function() if ns.flipProgress then seen[#seen + 1] = ns.flipProgress.phase end end
+  local notify = ns.NotifyUI
+  ns.NotifyUI = function() if ns.flipProgress then seen[#seen + 1] = ns.flipProgress.phase end end
   ns.ScanReplicateForFlips(true)
   flush()
-  ns.OnFlipProgress = nil
+  ns.NotifyUI = notify
   assert(seen[1] == "reading" and ns.flipProgress == nil)
   ns.ahOpen = false
 end)

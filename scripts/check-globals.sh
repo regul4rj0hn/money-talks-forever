@@ -18,11 +18,11 @@ GetAddOnMetadata GetInboxHeaderInfo GetInboxInvoiceInfo GetInboxItem GetInboxNum
 GetRealmName GetTime IsModifiedClick ItemLocation NO NUM_BAG_SLOTS NUM_TOTAL_EQUIPPED_BAG_SLOTS
 ScrollBoxConstants ScrollUtil SlashCmdList StaticPopupDialogs StaticPopup_Show TooltipDataProcessor UIParent
 UISpecialFrames UnitName YES SLASH_MONEYTALKSFOREVER1 SLASH_MONEYTALKSFOREVER2
-date hooksecurefunc ipairs math next pairs pcall print select string table time tinsert tonumber tostring type unpack
+assert date hooksecurefunc ipairs math next pairs pcall print select string table time tinsert tonumber tostring type unpack
 "
 
 used=$(
-  for f in "$ADDON_DIR"/*.lua; do
+  find "$ADDON_DIR" -name '*.lua' | sort | while read -r f; do
     "$LUAC" -o /dev/null -l "$f"
   done |
     # Lua 5.1: GETGLOBAL/SETGLOBAL ... ; name    Lua 5.2+: GETTABUP/SETTABUP ... _ENV "name"

@@ -114,7 +114,7 @@ T.Test("max reagent prices and Auctionator shopping list", function()
   local caps = ns.CollectShoppingCaps()
   assert(#caps == 1 and caps[1].name == "Linen Cloth" and caps[1].maxPrice == 124 and caps[1].recipes == 2)
 
-  ns.CreateShoppingList()
+  ns.CreateReagentShoppingList()
   local list = W.createdLists[ns.SHOPPING_LIST_NAME]
   assert(list and #list == 1 and list[1] == '"Linen Cloth";;;;;;;;0.0124;;;;', tostring(list and list[1]))
 end)

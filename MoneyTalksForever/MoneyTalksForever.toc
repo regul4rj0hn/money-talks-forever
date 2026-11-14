@@ -6,11 +6,29 @@
 ## OptionalDeps: Auctionator, CraftShuffler
 ## SavedVariables: MoneyTalksForeverDB
 
+# Foundations
+Util.lua
+Events.lua
 Core.lua
+Auctionator.lua
+
+# Features
+Scanner.lua
 Pricing.lua
 AuctionHouse.lua
 Flips.lua
+Tooltip.lua
+
+# Profit tracking
 Ledger.lua
-Mail.lua
-Scanner.lua
-UI.lua
+LedgerAH.lua
+LedgerVendor.lua
+LedgerMail.lua
+
+# Commands and window
+Commands.lua
+UI\Widgets.lua
+UI\CraftsTab.lua
+UI\FlipsTab.lua
+UI\ProfitTab.lua
+UI\Window.lua
