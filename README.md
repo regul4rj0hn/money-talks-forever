@@ -115,13 +115,19 @@ How it's tracked, per character:
   price you paid.
 - **Crafting** a recorded recipe uses its reagents from stock and puts the crafted item in stock at their cost.
   Crafted reagents like bolts carry their cost into the next craft.
+- **Listing on the AH** records the deposit you paid, for items the addon tracks.
+- **Selling on the AH**: when you collect the gold from an *Auction successful* mail, profit = sale price - AH cut -
+  stock cost. A deposit paid back with the payout costs nothing. When you take an item back from an
+  *Auction expired* or *Auction cancelled* mail, that listing's deposit counts as a cost. This works however you open
+  mail (one by one, Open All, or a mail addon).
 - **Selling to a vendor** realizes profit = what the vendor paid - stock cost. Sold items that were crafted count as
   Crafts; items sold as bought count as Flips. Items the addon never saw being bought or crafted, like loot and junk,
   are ignored.
 - Reagents you used without buying them while tracking (farmed, or bought before installing) are valued at the
   current market price and reported as **estimated** cost.
 
-Not tracked yet: selling crafted items on the AH. After each vendor visit, chat shows the profit from tracked items.
+After each vendor or mailbox visit, chat shows the profit from tracked items. The per-item list shows whether each
+item sold to vendors, on the AH or both, and hovering a total shows the split and any deposits lost.
 **Reset** clears the history for the current character.
 
 ## AH or vendor?
@@ -141,6 +147,8 @@ depend on reagent cost.
 ## Development
 
 `lua tests/run.lua` runs offline tests of the scanning and pricing logic against a mocked WoW API.
+`scripts/check-globals.sh` fails if the addon uses a global name that isn't a known WoW API. That catches calls to a
+`local function` defined further down a file, which only break in game. Both run before every release.
 
 ### Releases
 
