@@ -70,7 +70,15 @@ local function RegisterAuctionatorCallback()
       ns.announceNextEval = true
       ns.RequestEvaluate(1)
       -- After a full scan the game still holds every listing; look for ones below vendor price.
-      if ns.ahOpen then C_Timer.After(1, function() ns.ScanReplicateForFlips() end) end
+      if ns.ahOpen then
+        C_Timer.After(1, function()
+          if not ns.ScanReplicateForFlips() then
+            -- Prices were updated by an incremental scan, which has no individual listings.
+            ns.lastScanIncremental = true
+            if ns.RefreshUI then ns.RefreshUI() end
+          end
+        end)
+      end
     end)
     if not ok then Print("Could not register for Auctionator updates:", tostring(err)) end
   end
@@ -99,6 +107,31 @@ frame:SetScript("OnEvent", function(_, event, arg1)
   end
 end)
 
+-- Diagnostic dump for troubleshooting (no personal data).
+function ns.PrintDebug()
+  local AH = C_AuctionHouse
+  local api = ns.AuctionatorAPI()
+  local replicateSetting = "?"
+  if Auctionator and Auctionator.Config and Auctionator.Config.Get and Auctionator.Config.Options then
+    local ok, v = pcall(Auctionator.Config.Get, Auctionator.Config.Options.REPLICATE_SCAN)
+    if ok then replicateSetting = tostring(v) end
+  end
+  local f = ns.flips or {}
+  Print("debug, version " .. ns.VERSION)
+  print("  Auctionator API: " .. tostring(api ~= nil) .. ", DB update hook: " .. tostring(api and api.RegisterForDBUpdate ~= nil))
+  print("  Auctionator full-scan mode ('alternate scan mode' option): " .. replicateSetting)
+  print("  AH open: " .. tostring(ns.ahOpen == true) .. ", replicate listings available: "
+    .. tostring(AH and AH.GetNumReplicateItems and AH.GetNumReplicateItems() or "n/a"))
+  print("  full scan pending: " .. tostring(ns.fullScanPending == true) .. ", flip scan running: "
+    .. tostring(ns.flipScanRunning == true) .. ", last update was incremental: " .. tostring(ns.lastScanIncremental == true))
+  print(("  last flips scan: %s, %d listings read, %d flips, %d skipped"):format(
+    f.scannedAt and (math.floor((time() - f.scannedAt) / 60) .. " min ago") or "never",
+    f.listings or 0, f.items and #f.items or 0, f.skipped or 0))
+  local recipes = 0
+  for _ in pairs(ns.CharStore().recipes) do recipes = recipes + 1 end
+  print(("  recipes recorded: %d, evaluated rows: %d"):format(recipes, #ns.results))
+end
+
 ---------------------------------------------------------------------------
 -- Slash commands
 ---------------------------------------------------------------------------
@@ -118,6 +151,8 @@ local function Help()
   print("  /shuffle shop - create an Auctionator shopping list of reagents with max prices")
   print("  /shuffle flips - show AH listings cheaper than their vendor price (needs a full Auctionator scan)")
   print("  /shuffle flipmin <gold> - minimum profit per flip listing (now " .. ns.Money(s.flipMinProfit) .. ")")
+  print("  /shuffle fullscan - full AH scan for vendor flips (at the AH, once per 15 min)")
+  print("  /shuffle debug - print diagnostic info")
   print("  /shuffle duration 12|24|48 - auction duration for deposits (now " .. ns.DURATION_HOURS[s.ahDuration] .. "h)")
   print("  /shuffle reset - forget this character's stored recipes")
   print("Open each profession window once so its recipes are recorded.")
@@ -172,6 +207,11 @@ SlashCmdList.CRAFTSHUFFLER = function(msg)
     if not ns.ScanReplicateForFlips(true) and not ns.flips.scannedAt then
       Print("no full scan data yet - at the AH, run a full scan in Auctionator's Auctionator tab.")
     end
+  elseif cmd == "fullscan" then
+    ns.ShowTab("flips")
+    ns.StartFullScan()
+  elseif cmd == "debug" then
+    ns.PrintDebug()
   elseif cmd == "flipmin" then
     local gold = tonumber(rest)
     if not gold or gold < 0 then
