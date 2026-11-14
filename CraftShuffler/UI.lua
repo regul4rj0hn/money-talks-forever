@@ -311,11 +311,18 @@ local function CreateUI()
   end)
   frame.onlyShuffle = cb
 
+  -- Footer (flips tab): our own full scan, independent of Auctionator's scan mode
+  local fullScan = SimpleButton(frame.panels.flips, "Full scan", 100, function() ns.StartFullScan() end,
+    "Full AH scan",
+    "Downloads every AH listing and looks for items below vendor price. Must be at the AH. "
+    .. "The AH allows one full scan every 15 minutes, shared with Auctionator.")
+  fullScan:SetPoint("TOPLEFT", frame.panels.flips, "BOTTOMLEFT", 12, -8)
+
   -- Footer: buttons act on the current tab
   local refresh = SimpleButton(frame, "Refresh", 90, function()
     if ns.Settings().tab == "flips" then
       if not ns.ScanReplicateForFlips(true) then
-        ns.Print("no full scan data available - at the AH, run a full scan in Auctionator first.")
+        ns.Print("no full scan data to read. At the AH, click Full scan.")
       end
     else
       ns.ScanOpenProfession()
@@ -374,12 +381,21 @@ local function RefreshFlips(panel)
   else
     frame.summary:SetText("")
   end
-  if ns.flipScanRunning then
-    panel.empty:SetText("Scanning listings...")
+  if ns.fullScanPending then
+    panel.empty:SetText("Full scan requested, waiting for the auction house...")
+  elseif ns.flipScanRunning then
+    panel.empty:SetText("Reading listings...")
   elseif #f.items > 0 then
     panel.empty:SetText("")
   elseif not f.scannedAt then
-    panel.empty:SetText("No full scan yet.\nAt the AH, run a full scan in Auctionator; flips appear when it finishes.")
+    local msg = "No full scan yet.\nAt the auction house, click Full scan below."
+    if ns.lastScanIncremental then
+      msg = "Auctionator's last scan was incremental, which doesn't include individual listings.\n"
+        .. "Click Full scan below, or tick 'Use alternate slower scan mode by default'\nin Auctionator's Advanced settings."
+    elseif not ns.ahOpen then
+      msg = msg .. "\n(The auction house is closed.)"
+    end
+    panel.empty:SetText(msg)
   else
     panel.empty:SetText("No listings below vendor price in the last full scan.")
   end
