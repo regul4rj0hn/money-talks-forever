@@ -40,6 +40,7 @@ notes=$(awk '/^## \[Unreleased\]/{f=1; next} /^## \[/{f=0} f' "$CHANGELOG" | sed
 
 echo "Running tests..."
 lua tests/run.lua
+scripts/check-globals.sh
 
 today=$(date +%Y-%m-%d)
 sed -i "s/^## Version: .*/## Version: $next/" "$TOC"
