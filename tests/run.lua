@@ -34,7 +34,9 @@ time = os.time
 
 -- Replicate (full scan) listings: { itemID, count, buyout, owner }
 local replicate = {}
+local replicateRequests = 0
 C_AuctionHouse = {
+  ReplicateItems = function() replicateRequests = replicateRequests + 1 end,
   GetNumReplicateItems = function() return #replicate end,
   GetReplicateItemInfo = function(i) -- 0-based, like the real API
     local l = replicate[i + 1]
@@ -259,6 +261,52 @@ tests["vendor flips from full scan listings"] = function()
   replicate = {}
   assert(ns.ScanReplicateForFlips(true) == false, "no replicate data -> false, keeps last result")
   assert(#ns.flips.items == 1)
+end
+
+tests["full scan button, item data retry and timeout"] = function()
+  Setup(LINEN)
+  ns.flips = { items = {}, listings = 0 }
+  replicate = {}
+
+  -- Not at the AH: no request
+  ns.ahOpen = false
+  ns.StartFullScan()
+  assert(replicateRequests == 0 and not ns.fullScanPending)
+
+  -- At the AH: requests a full scan, then reads listings when the game answers
+  ns.ahOpen = true
+  ns.StartFullScan()
+  assert(replicateRequests == 1 and ns.fullScanPending)
+  ns.StartFullScan()
+  assert(replicateRequests == 1, "no second request while one is pending")
+
+  -- Shirt is not cached yet on the first read, then the game loads it
+  local shirt = items[2568]
+  items[2568] = nil
+  local requestedLoads = {}
+  C_Item.RequestLoadItemDataByID = function(id)
+    requestedLoads[#requestedLoads + 1] = id
+    items[2568] = shirt
+  end
+  replicate = { { 2568, 1, 150 }, { 2568, 1, 160 } }
+  ns.OnReplicateListUpdate()
+  assert(not ns.fullScanPending)
+  flush() -- runs the retry
+  C_Item.RequestLoadItemDataByID = function() end
+  assert(#requestedLoads == 1, "item data requested once per item, got " .. #requestedLoads)
+  assert(#ns.flips.items == 1 and ns.flips.items[1].listings == 2 and ns.flips.skipped == 0)
+
+  -- AH never answers: timeout clears the pending state
+  ns.StartFullScan()
+  assert(ns.fullScanPending)
+  flush() -- runs the timeout callback (mock timers ignore delays)
+  assert(not ns.fullScanPending)
+
+  -- Closing the AH cancels a pending scan
+  ns.StartFullScan()
+  ns.CancelFullScan()
+  assert(not ns.fullScanPending)
+  ns.ahOpen = false
 end
 
 local names = {}
