@@ -42,10 +42,18 @@ function T.RunNextTimer() table.remove(timers, 1)() end
 local registry = {} -- frames that registered events
 
 local Widget = {}
-local WidgetMT = { __index = function(_, k) return Widget[k] or function() end end }
+local function NoOp() end
+-- Widget methods are CamelCase: unknown ones are no-ops. Lowercase keys are plain data fields (nil if unset).
+local WidgetMT = { __index = function(_, k)
+  if Widget[k] then return Widget[k] end
+  if type(k) == "string" and k:match("^%u") then return NoOp end
+end }
 
+T.widgets = {} -- every widget ever created, so UI tests can find and poke them without knowing the layout
 local function NewWidget(kind)
-  return setmetatable({ kind = kind, scripts = {}, events = {}, shown = true }, WidgetMT)
+  local w = setmetatable({ kind = kind, scripts = {}, events = {}, shown = true }, WidgetMT)
+  table.insert(T.widgets, w)
+  return w
 end
 T.NewWidget = NewWidget
 
@@ -86,7 +94,11 @@ function Widget:SetDataProvider(provider)
   end
 end
 
-function CreateFrame(kind) return NewWidget(kind) end
+function CreateFrame(kind, name)
+  local w = NewWidget(kind)
+  if name then _G[name] = w end
+  return w
+end
 
 function T.Fire(event, ...)
   for frame in pairs(registry) do
