@@ -41,6 +41,7 @@ jobs:
       - name: Build zip
         run: |
           # The zip contains the MoneyTalksForever/ folder, ready to extract into Interface/AddOns/.
+          cp LICENSE MoneyTalksForever/LICENSE.txt
           zip -r "MoneyTalksForever-$TAG.zip" MoneyTalksForever
 
       - name: Extract release notes from CHANGELOG

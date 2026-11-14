@@ -10,6 +10,7 @@ Each version is a [GitHub release](https://github.com/regul4rj0hn/money-talks-fo
 - **Renamed to Money Talks Forever.** The addon folder is now `MoneyTalksForever`, the command is `/mtf` (`/shuffle`
   still works), and the Auctionator shopping lists are `Money Talks Forever` and `Money Talks Forever Flips`. The
   GitHub repository is now `money-talks-forever`.
+- MIT license, also included in the release zip as `LICENSE.txt`.
 - Existing CraftShuffler data is imported on first login when the old addon is still installed, and CraftShuffler is
   then disabled.
 

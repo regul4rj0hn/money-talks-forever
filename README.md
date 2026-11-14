@@ -184,3 +184,7 @@ If a tag ever ends up without a release, run the workflow by hand: `gh workflow 
 
 - The TOC targets `## Interface: 16001`. If the client reports the addon as out of date after a patch, bump this.
 - AH prices are Auctionator's last-scan minimum buyout. Buying many units will push the real cost above that.
+
+## License
+
+[MIT](LICENSE)
