@@ -7,6 +7,10 @@ Each version is a [GitHub release](https://github.com/regul4rj0hn/craft-shuffler
 ## [Unreleased]
 
 ### Added
+- **Profit** tab ("profit so far"): what you actually made from crafts and flips sold to vendors, for this session,
+  today and all time, with gold per hour, unsold stock and a per-item breakdown. Tracks AH purchases at the price
+  paid, NPC vendor purchases, crafts and vendor sales. A short profit line is printed after each vendor visit.
+  `/shuffle profit`, `/shuffle profit reset`.
 - **Full scan** button on the Vendor flips tab and `/shuffle fullscan`, so flips no longer depend on Auctionator's
   scan mode.
 - `/shuffle debug` prints diagnostic info for troubleshooting.

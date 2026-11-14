@@ -45,6 +45,7 @@ Or copy the `CraftShuffler` folder from this repo. Requires
 | `/shuffle minprofit <gold>` | Minimum profit per craft to be flagged, e.g. `0.5` = 50s |
 | `/shuffle shop` | Create the Auctionator shopping list `CraftShuffler` with max prices (same as the **Shopping list** button) |
 | `/shuffle flips` | Open the Vendor flips tab (AH listings cheaper than their vendor price) |
+| `/shuffle profit` | Open the Profit tab; `/shuffle profit reset` clears this character's profit history |
 | `/shuffle fullscan` | Full AH scan for vendor flips (at the AH, once per 15 minutes) |
 | `/shuffle debug` | Print diagnostic info (scan state, Auctionator settings, counts) |
 | `/shuffle flipmin <gold>` | Minimum profit per flip listing, e.g. `0.01` = 1s |
@@ -101,6 +102,27 @@ total cost and the profit.
   profitable unit price.
 - Results are a snapshot of the scan, so other players may buy some listings first. The tab shows how old the scan is.
 - `/shuffle flipmin <gold>` sets the minimum profit per listing (default 1 copper).
+
+## Profit so far
+
+The **Profit** tab (`/shuffle profit`) shows what you actually made. It uses the prices you paid and the money vendors
+gave you, not estimates. It shows this session, today and all time, separately for **Crafts** and **Flips**, plus your
+gold per hour this session. Hover a number for items sold, vendor money, cost and how much of the cost is estimated.
+
+How it's tracked, per character:
+
+- **Buying** on the AH (through Auctionator or Blizzard's UI) or from an NPC vendor puts the item in stock at the
+  price you paid.
+- **Crafting** a recorded recipe uses its reagents from stock and puts the crafted item in stock at their cost.
+  Crafted reagents like bolts carry their cost into the next craft.
+- **Selling to a vendor** realizes profit = what the vendor paid - stock cost. Sold items that were crafted count as
+  Crafts; items sold as bought count as Flips. Items the addon never saw being bought or crafted, like loot and junk,
+  are ignored.
+- Reagents you used without buying them while tracking (farmed, or bought before installing) are valued at the
+  current market price and reported as **estimated** cost.
+
+Not tracked yet: selling crafted items on the AH. After each vendor visit, chat shows the profit from tracked items.
+**Reset** clears the history for the current character.
 
 ## AH or vendor?
 
