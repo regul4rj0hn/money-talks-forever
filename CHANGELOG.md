@@ -6,6 +6,8 @@ Each version is a [GitHub release](https://github.com/regul4rj0hn/craft-shuffler
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-14
+
 ### Added
 - **Profit** tab ("profit so far"): what you actually made from crafts and flips sold to vendors, for this session,
   today and all time, with gold per hour, unsold stock and a per-item breakdown. Tracks AH purchases at the price

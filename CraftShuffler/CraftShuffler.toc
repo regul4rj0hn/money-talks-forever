@@ -2,7 +2,7 @@
 ## Title: CraftShuffler
 ## Notes: Flags craftable, non-soulbound items whose Auctionator reagent cost is below the item's vendor price ("Shuffle me!").
 ## IconTexture: Interface\Icons\INV_Misc_Coin_02
-## Version: 0.2.0
+## Version: 0.3.0
 ## OptionalDeps: Auctionator
 ## SavedVariables: CraftShufflerDB
 
