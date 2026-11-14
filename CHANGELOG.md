@@ -6,6 +6,8 @@ Each version is a [GitHub release](https://github.com/regul4rj0hn/craft-shuffler
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-14
+
 ### Added
 - Profit tracking includes **AH sales**. Income comes from *Auction successful* mail when you collect it (sale price
   minus AH cut), and deposits are recorded when listing. A deposit lost on an expired or cancelled auction counts as
