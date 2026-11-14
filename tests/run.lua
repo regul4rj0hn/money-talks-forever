@@ -32,6 +32,7 @@ C_Item = {
   end,
   RequestLoadItemDataByID = function() end,
   GetItemNameByID = function(id) return items[id] and items[id][1] end,
+  GetItemID = function(location) return location.itemID end,
 }
 local createdLists = {}
 time = os.time
@@ -46,6 +47,26 @@ end
 
 local money = 0
 GetMoney = function() return money end
+
+-- Mailbox: { subject, money, invoice = {type, itemName, bid, deposit, consignment, count}, item = {name, id, count} }
+local inbox = {}
+GetInboxNumItems = function() return #inbox end
+GetInboxHeaderInfo = function(i)
+  local m = inbox[i]
+  return nil, nil, "Auction House", m.subject, m.money or 0, 0, 30, m.item and 1 or nil
+end
+GetInboxInvoiceInfo = function(i)
+  local v = inbox[i].invoice
+  if not v then return nil end
+  return v.type, v.itemName, nil, v.bid, v.bid, v.deposit, v.consignment, 0, 0, 0, v.count, true
+end
+GetInboxItem = function(i)
+  local it = inbox[i].item
+  if not it then return nil end
+  return it.name, it.id, nil, it.count
+end
+AUCTION_EXPIRED_MAIL_SUBJECT = "Auction expired: %s"
+AUCTION_REMOVED_MAIL_SUBJECT = "Auction cancelled: %s"
 
 -- Bags: one bag holding { [itemID] = count }
 local bag = {}
@@ -73,6 +94,8 @@ C_AuctionHouse = {
   StartCommoditiesPurchase = function() end,
   ConfirmCommoditiesPurchase = function() end,
   PlaceBid = function() end,
+  PostItem = function() return true end,
+  PostCommodity = function() return true end,
   GetAuctionInfoByID = function(id) return auctionsByID and auctionsByID[id] end,
   GetNumReplicateItems = function() return #replicate end,
   GetReplicateItemInfo = function(i) -- 0-based, like the real API
@@ -109,7 +132,7 @@ C_TradeSkillUI = {
 }
 
 local ns = {}
-for _, f in ipairs({ "Core.lua", "Pricing.lua", "AuctionHouse.lua", "Flips.lua", "Ledger.lua", "Scanner.lua" }) do
+for _, f in ipairs({ "Core.lua", "Pricing.lua", "AuctionHouse.lua", "Flips.lua", "Ledger.lua", "Mail.lua", "Scanner.lua" }) do
   assert(loadfile(ADDON_DIR .. "/" .. f))("CraftShuffler", ns)
 end
 print = function() end -- silence addon chat output
@@ -484,6 +507,67 @@ tests["ledger: AH purchases, crafts and vendor sales"] = function()
 
   ns.ResetLedger()
   assert(ns.Ledger().all.crafts.qty == 0 and ns.BucketProfit(ns.session) == 0)
+end
+
+local function FireMail(event) ns.mailFrame.scripts.OnEvent(ns.mailFrame, event) end
+
+tests["ledger: AH sales from mail and lost deposits"] = function()
+  LINEN.ah = { [2589] = 20, [2996] = 60 }
+  Setup(LINEN)
+  ns.session = ns.NewLedgerBucket()
+  money, bag, inbox = 100000, {}, {}
+  Fire("PLAYER_LOGIN")
+  Fire("PLAYER_LOGIN") -- a second install must not double-record
+  local L = ns.Ledger()
+
+  -- 2 shirts bought for 150 each, listed together: the 30 deposit leaves your gold after posting
+  ns.RecordPurchase(2568, 2, 300)
+  C_AuctionHouse.PostItem({ itemID = 2568 }, 1, 2, nil, 400)
+  money = money - 30
+  Fire("PLAYER_MONEY")
+  assert(#L.deposits[2568] == 1 and L.deposits[2568][1].amount == 30, "one deposit of 30 recorded")
+  -- Listing an untracked item records no deposit
+  C_AuctionHouse.PostItem({ itemID = 5000 }, 1, 1, nil, 10)
+  money = money - 5
+  Fire("PLAYER_MONEY")
+  assert(L.deposits[5000] == nil)
+
+  -- Mailbox: one shirt sold (200, AH cut 10, half the deposit paid back), one came back expired, one untracked sale
+  inbox = {
+    { subject = "Auction successful: Linen Shirt", money = 200 - 10 + 15,
+      invoice = { type = "seller", itemName = "Linen Shirt", bid = 200, deposit = 15, consignment = 10, count = 1 } },
+    { subject = "Auction expired: Linen Shirt", item = { name = "Linen Shirt", id = 2568, count = 1 } },
+    { subject = "Auction successful: Junk", money = 50,
+      invoice = { type = "seller", itemName = "Junk", bid = 52, deposit = 0, consignment = 2, count = 1 } },
+  }
+  FireMail("MAIL_SHOW")
+  FireMail("MAIL_INBOX_UPDATE")             -- nothing collected yet
+  assert(L.all.flips.qty == 0)
+  table.remove(inbox, 1)                    -- take the sale money
+  FireMail("MAIL_INBOX_UPDATE")
+  local fl = L.all.flips
+  assert(fl.qty == 1 and fl.earned == 190 and fl.cost == 150 and (fl.ahQty or 0) == 1 and (fl.deposits or 0) == 0,
+    "AH sale: net 190, cost 150, refunded deposit is not a cost")
+  table.remove(inbox, 1)                    -- take the expired shirt
+  table.remove(inbox, 1)                    -- untracked sale
+  FireMail("MAIL_INBOX_UPDATE")
+  FireMail("MAIL_CLOSED")
+  assert(fl.qty == 1 and fl.cost == 165 and fl.deposits == 15, "expired auction loses the other half of the deposit")
+  assert(L.deposits[2568] == nil and L.items[2568].ahQty == 1 and L.bought[2568].qty == 1)
+  assert(ns.BucketProfit(ns.session) == 190 - 165)
+
+  -- Two identical sale mails, only one collected -> one sale. Deposit not paid back -> it is a cost.
+  ns.RecordPurchase(2996, 2, 20)
+  ns.RecordDeposit(2996, 1, 3)
+  local mail = { subject = "Auction successful: Bolt of Linen Cloth", money = 14,
+    invoice = { type = "seller", itemName = "Bolt of Linen Cloth", bid = 15, deposit = 3, consignment = 1, count = 1 } }
+  inbox = { mail, mail }
+  FireMail("MAIL_SHOW")
+  inbox = { mail }
+  FireMail("MAIL_INBOX_UPDATE")
+  FireMail("MAIL_CLOSED")
+  assert(L.items[2996].ahQty == 1 and L.items[2996].earned == 14 and L.items[2996].cost == 10 + 3)
+  inbox = {}
 end
 
 local names = {}
