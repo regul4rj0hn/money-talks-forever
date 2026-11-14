@@ -186,6 +186,7 @@ f:SetScript("OnEvent", function(_, event)
     C_Timer.After(1, ns.CaptureDeposits)
   elseif event == "AUCTION_HOUSE_CLOSED" then
     ns.ahOpen = false
+    ns.CancelFullScan()
   elseif event == "BAG_UPDATE_DELAYED" and ns.ahOpen then
     ns.CaptureDeposits()
   end

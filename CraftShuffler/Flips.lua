@@ -14,12 +14,18 @@ function ns.LoadSavedFlips()
   if saved then ns.flips = saved end
 end
 
+local MAX_ATTEMPTS = 3   -- re-read the listings while the game loads item data we didn't have yet
+local RETRY_DELAY = 5
+
 -- Scans the current replicate data. Returns false if there is none (no full scan done / AH closed).
-function ns.ScanReplicateForFlips(force)
+-- ns.lastScanIncremental records that Auctionator updated prices without a full scan, for the UI hint.
+function ns.ScanReplicateForFlips(force, attempt)
+  attempt = attempt or 1
   local AH = C_AuctionHouse
   if not AH or not AH.GetNumReplicateItems then return false end
   local n = AH.GetNumReplicateItems() or 0
   if n == 0 then return false end
+  ns.lastScanIncremental = false
   if ns.flipScanRunning then return true end
   -- RegisterForDBUpdate also fires for incremental scans; skip re-reading the same full scan.
   if not force and ns.flips.listings == n and ns.flips.scannedAt and time() - ns.flips.scannedAt < 15 * 60 then
@@ -29,7 +35,7 @@ function ns.ScanReplicateForFlips(force)
   ns.flipScanRunning = true
   local me = UnitName("player")
   local minProfit = ns.Settings().flipMinProfit
-  local byItem, skipped = {}, 0
+  local byItem, skipped, requested = {}, 0, {}
   local index = 0 -- replicate indices are 0-based
 
   local function Finish()
@@ -43,10 +49,20 @@ function ns.ScanReplicateForFlips(force)
     CraftShufflerDB.flips[RealmKey()] = ns.flips
     ns.flipScanRunning = false
 
+    if skipped > 0 and attempt < MAX_ATTEMPTS then
+      -- Item data is being loaded by the game; read the listings again in a moment.
+      if attempt == 1 then
+        ns.Print(("loading details for %d listing(s), rescanning shortly..."):format(skipped))
+      end
+      C_Timer.After(RETRY_DELAY, function() ns.ScanReplicateForFlips(true, attempt + 1) end)
+      if ns.RefreshUI then ns.RefreshUI() end
+      return
+    end
+
     local total = 0
     for _, e in ipairs(items) do total = total + e.profit end
-    ns.Print(("vendor flips: %d item(s) on the AH below vendor price, %s total profit (/shuffle flips)")
-      :format(#items, ns.Money(total)))
+    ns.Print(("vendor flips: %d item(s) on the AH below vendor price, %s total profit (/shuffle flips)%s")
+      :format(#items, ns.Money(total), skipped > 0 and (" - %d listing(s) skipped, item data not loaded"):format(skipped) or ""))
     if ns.RefreshUI then ns.RefreshUI() end
   end
 
@@ -59,6 +75,10 @@ function ns.ScanReplicateForFlips(force)
         local name, _, _, _, _, _, _, _, _, _, sellPrice = C_Item.GetItemInfo(link or itemID)
         if not name then
           skipped = skipped + 1
+          if not requested[itemID] then
+            requested[itemID] = true
+            C_Item.RequestLoadItemDataByID(itemID)
+          end
         elseif sellPrice and sellPrice > 0 then
           local profit = sellPrice * count - buyout
           if profit >= minProfit then
@@ -89,6 +109,61 @@ function ns.ScanReplicateForFlips(force)
 
   Step()
   return true
+end
+
+---------------------------------------------------------------------------
+-- Our own full scan, so flips don't depend on Auctionator's scan mode setting
+---------------------------------------------------------------------------
+local FULL_SCAN_TIMEOUT = 90
+
+local scanFrame = CreateFrame("Frame")
+
+function ns.OnReplicateListUpdate()
+  if not ns.fullScanPending then return end
+  ns.fullScanPending = false
+  scanFrame:UnregisterEvent("REPLICATE_ITEM_LIST_UPDATE")
+  if not ns.ScanReplicateForFlips(true) then
+    ns.Print("the full scan returned no listings.")
+  end
+  if ns.RefreshUI then ns.RefreshUI() end
+end
+
+scanFrame:SetScript("OnEvent", function(_, event)
+  if event == "REPLICATE_ITEM_LIST_UPDATE" then ns.OnReplicateListUpdate() end
+end)
+
+function ns.CancelFullScan()
+  if not ns.fullScanPending then return end
+  ns.fullScanPending = false
+  scanFrame:UnregisterEvent("REPLICATE_ITEM_LIST_UPDATE")
+end
+
+-- Asks the game for every AH listing (C_AuctionHouse.ReplicateItems). The AH allows one such scan per
+-- 15 minutes, shared with Auctionator's full scan.
+function ns.StartFullScan()
+  if not ns.ahOpen then
+    ns.Print("open the auction house first.")
+    return
+  end
+  if ns.fullScanPending or ns.flipScanRunning then return end
+  if not C_AuctionHouse or not C_AuctionHouse.ReplicateItems then
+    ns.Print("full scans are not available on this client.")
+    return
+  end
+  ns.fullScanPending = true
+  scanFrame:RegisterEvent("REPLICATE_ITEM_LIST_UPDATE")
+  C_AuctionHouse.ReplicateItems()
+  ns.Print("full scan requested, this can take a minute on a busy AH...")
+  if ns.RefreshUI then ns.RefreshUI() end
+
+  C_Timer.After(FULL_SCAN_TIMEOUT, function()
+    if not ns.fullScanPending then return end
+    ns.fullScanPending = false
+    scanFrame:UnregisterEvent("REPLICATE_ITEM_LIST_UPDATE")
+    ns.Print("the AH did not answer the full scan. It allows one every 15 minutes (shared with Auctionator), "
+      .. "so try again later.")
+    if ns.RefreshUI then ns.RefreshUI() end
+  end)
 end
 
 -- Auctionator shopping list: each flip item capped at the highest unit price that still profits.
