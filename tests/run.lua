@@ -31,6 +31,7 @@ C_Item = {
 }
 local createdLists = {}
 time = os.time
+GetTime = os.clock
 
 -- Replicate (full scan) listings: { itemID, count, buyout, owner }
 local replicate = {}
@@ -277,6 +278,7 @@ tests["full scan button, item data retry and timeout"] = function()
   ns.ahOpen = true
   ns.StartFullScan()
   assert(replicateRequests == 1 and ns.fullScanPending)
+  assert(ns.flipProgress and ns.flipProgress.phase == "waiting" and ns.flipProgress.timeout == 90)
   ns.StartFullScan()
   assert(replicateRequests == 1, "no second request while one is pending")
 
@@ -291,7 +293,10 @@ tests["full scan button, item data retry and timeout"] = function()
   replicate = { { 2568, 1, 150 }, { 2568, 1, 160 } }
   ns.OnReplicateListUpdate()
   assert(not ns.fullScanPending)
+  local p = ns.flipProgress
+  assert(p and p.phase == "loading" and p.skipped == 1 and p.attempt == 2, "waiting for item details before retry")
   flush() -- runs the retry
+  assert(ns.flipProgress == nil, "idle again after the scan")
   C_Item.RequestLoadItemDataByID = function() end
   assert(#requestedLoads == 1, "item data requested once per item, got " .. #requestedLoads)
   assert(#ns.flips.items == 1 and ns.flips.items[1].listings == 2 and ns.flips.skipped == 0)
@@ -305,7 +310,25 @@ tests["full scan button, item data retry and timeout"] = function()
   -- Closing the AH cancels a pending scan
   ns.StartFullScan()
   ns.CancelFullScan()
+  assert(not ns.fullScanPending and ns.flipProgress == nil)
+
+  -- A timeout left over from an earlier scan must not cancel a newer one
+  replicate = { { 2568, 1, 150 } }
+  ns.StartFullScan()          -- scan A (its timeout is queued)
+  ns.OnReplicateListUpdate()  -- A finishes
+  ns.StartFullScan()          -- scan B
+  table.remove(timers, 1)()   -- A's timeout fires
+  assert(ns.fullScanPending, "stale timeout cancelled the newer scan")
+  flush()                     -- B's timeout
   assert(not ns.fullScanPending)
+
+  -- Reading progress reaches the total
+  local seen = {}
+  ns.OnFlipProgress = function() if ns.flipProgress then seen[#seen + 1] = ns.flipProgress.phase end end
+  ns.ScanReplicateForFlips(true)
+  flush()
+  ns.OnFlipProgress = nil
+  assert(seen[1] == "reading" and ns.flipProgress == nil)
   ns.ahOpen = false
 end
 
