@@ -91,6 +91,9 @@ total cost and the profit.
 - At the AH, click **Full scan** on the Vendor flips tab (or `/shuffle fullscan`). This downloads every listing, and
   CraftShuffler compares each listing's unit price with the vendor price. Bid-only and your own auctions are skipped.
   The AH allows one full scan every 15 minutes, shared with Auctionator.
+  A progress bar next to the button shows each step. **Waiting** for the AH to send the listings has no progress
+  from the game, so it shows elapsed time and gives up after 90s. **Reading** shows listings read out of the total.
+  **Loading details** counts down while the game loads items it didn't know yet, then reads again, up to 3 times.
 - Auctionator's own **Scan** button only does a full scan if *Use alternate slower scan mode by default* is ticked
   in Auctionator's Advanced settings. It is off by default, and then Auctionator runs incremental scans. Those don't
   include individual listings and can't find flips. With the option on, flips update after every Auctionator scan.
