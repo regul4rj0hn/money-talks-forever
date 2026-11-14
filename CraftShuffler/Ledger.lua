@@ -59,12 +59,18 @@ local function StockTake(stock, itemID, qty)
   return take, cost, est
 end
 
-local function AddTo(b, kind, earned, cost, qty, estimated)
+-- channel: "vendor" or "ah" (sold on the auction house); deposit: AH deposit lost, already included in cost.
+local function AddTo(b, kind, earned, cost, qty, estimated, channel, deposit)
   local k = b[kind]
   k.earned = k.earned + earned
   k.cost = k.cost + cost
   k.qty = k.qty + qty
   k.estimated = k.estimated + (estimated or 0)
+  if channel == "ah" then
+    k.ahQty = (k.ahQty or 0) + qty
+    k.ahEarned = (k.ahEarned or 0) + earned
+  end
+  k.deposits = (k.deposits or 0) + (deposit or 0)
 end
 
 local function PruneDays(days)
@@ -74,16 +80,16 @@ local function PruneDays(days)
   end
 end
 
-local function Realize(kind, itemID, qty, earned, cost, estimated)
+local function Realize(kind, itemID, qty, earned, cost, estimated, channel, deposit)
   local L = ns.Ledger()
   local day = Today()
   if not L.days[day] then
     L.days[day] = NewBucket()
     PruneDays(L.days)
   end
-  AddTo(L.all, kind, earned, cost, qty, estimated)
-  AddTo(L.days[day], kind, earned, cost, qty, estimated)
-  AddTo(ns.session, kind, earned, cost, qty, estimated)
+  AddTo(L.all, kind, earned, cost, qty, estimated, channel, deposit)
+  AddTo(L.days[day], kind, earned, cost, qty, estimated, channel, deposit)
+  AddTo(ns.session, kind, earned, cost, qty, estimated, channel, deposit)
   ns.sessionStart = ns.sessionStart or GetTime()
 
   local it = L.items[itemID]
@@ -95,6 +101,7 @@ local function Realize(kind, itemID, qty, earned, cost, estimated)
   it.qty = it.qty + qty
   it.earned = it.earned + earned
   it.cost = it.cost + cost
+  if channel == "ah" then it.ahQty = (it.ahQty or 0) + qty else it.vendorQty = (it.vendorQty or 0) + qty end
   if ns.OnLedgerChanged then ns.OnLedgerChanged() end
 end
 
@@ -146,23 +153,78 @@ function ns.RecordCraft(recipe)
 end
 
 -- Sold qty of itemID to a vendor for `earned` copper. Returns the profit that was tracked (nil if untracked).
-function ns.RecordVendorSale(itemID, qty, earned)
+-- Sold qty of itemID for `earned` copper via channel ("vendor" | "ah"). extraCost (e.g. a deposit that wasn't
+-- refunded) is added to the first part realized. Returns the tracked profit, or nil if the item was untracked.
+local function RecordSale(itemID, qty, earned, channel, extraCost)
   local L = ns.Ledger()
   local unitEarned = earned / qty
   local profit
+  extraCost = extraCost or 0
 
   local got, cost, est = StockTake(L.crafted, itemID, qty)
   if got > 0 then
-    Realize("crafts", itemID, got, unitEarned * got, cost, est)
-    profit = (profit or 0) + unitEarned * got - cost
+    Realize("crafts", itemID, got, unitEarned * got, cost + extraCost, est, channel, extraCost)
+    profit = (profit or 0) + unitEarned * got - cost - extraCost
+    extraCost = 0
   end
   local rest = qty - got
   got, cost = StockTake(L.bought, itemID, rest)
   if got > 0 then
-    Realize("flips", itemID, got, unitEarned * got, cost, 0)
-    profit = (profit or 0) + unitEarned * got - cost
+    Realize("flips", itemID, got, unitEarned * got, cost + extraCost, 0, channel, extraCost)
+    profit = (profit or 0) + unitEarned * got - cost - extraCost
   end
   return profit
+end
+
+function ns.RecordVendorSale(itemID, qty, earned)
+  return RecordSale(itemID, qty, earned, "vendor")
+end
+
+function ns.IsTracked(itemID)
+  local L = ns.Ledger()
+  return L.bought[itemID] ~= nil or L.crafted[itemID] ~= nil
+end
+
+-- AH deposits paid for listings of tracked items, oldest first: L.deposits[itemID] = { {qty, amount}, ... }
+function ns.RecordDeposit(itemID, qty, amount)
+  local L = ns.Ledger()
+  L.deposits = L.deposits or {}
+  L.deposits[itemID] = L.deposits[itemID] or {}
+  table.insert(L.deposits[itemID], { qty = qty, amount = amount })
+end
+
+-- Removes the deposits covering qty listed units (oldest first) and returns their total.
+local function TakeDeposit(itemID, qty)
+  local L = ns.Ledger()
+  local list = L.deposits and L.deposits[itemID]
+  local total = 0
+  while list and #list > 0 and qty > 0 do
+    local d = list[1]
+    local take = math.min(qty, d.qty)
+    local amount = d.amount * take / d.qty
+    total, qty = total + amount, qty - take
+    d.qty, d.amount = d.qty - take, d.amount - amount
+    if d.qty <= 0 then table.remove(list, 1) end
+  end
+  if list and #list == 0 then L.deposits[itemID] = nil end
+  return total
+end
+
+-- An auction sold: `net` = sale price minus the AH cut. depositRefund = deposit paid back with the payout.
+function ns.RecordAHSale(itemID, qty, net, depositRefund)
+  local deposit = TakeDeposit(itemID, qty)
+  local lost = math.max(0, deposit - (depositRefund or 0))
+  return RecordSale(itemID, qty, net, "ah", lost)
+end
+
+-- An auction expired or was cancelled and came back by mail: its deposit is lost.
+function ns.RecordAuctionReturned(itemID, qty)
+  local deposit = TakeDeposit(itemID, qty)
+  if deposit <= 0 then return 0 end
+  local L = ns.Ledger()
+  local kind = L.crafted[itemID] and "crafts" or "flips"
+  Realize(kind, itemID, 0, 0, deposit, 0, "ah", deposit)
+  return deposit
 end
 
 -- Value of everything bought or crafted that hasn't been sold or used yet.
@@ -226,13 +288,28 @@ local function OnPlaceBid(auctionID, amount)
   table.insert(pendingBuys, { itemID = info.itemKey.itemID, qty = info.quantity or 1, cost = amount, t = GetTime() })
 end
 
+-- Listings of tracked items waiting for their deposit to be paid.
+local pendingPosts = {}
+
+local function OnPost(location, _, qty)
+  if not location or not C_Item.GetItemID then return end
+  local ok, itemID = pcall(C_Item.GetItemID, location)
+  if ok and itemID and ns.IsTracked(itemID) then
+    table.insert(pendingPosts, { itemID = itemID, qty = qty or 1, t = GetTime() })
+  end
+end
+
 -- Hooks only observe calls (no taint): they run after the original function.
 function ns.InstallLedgerHooks()
   local AH = C_AuctionHouse
-  if not AH or not hooksecurefunc then return end
+  lastMoney = GetMoney()
+  if ns.ledgerHooksInstalled or not AH or not hooksecurefunc then return end
+  ns.ledgerHooksInstalled = true -- installing twice would record every purchase twice
   if AH.StartCommoditiesPurchase then hooksecurefunc(AH, "StartCommoditiesPurchase", OnStartCommoditiesPurchase) end
   if AH.ConfirmCommoditiesPurchase then hooksecurefunc(AH, "ConfirmCommoditiesPurchase", OnConfirmCommoditiesPurchase) end
   if AH.PlaceBid then hooksecurefunc(AH, "PlaceBid", OnPlaceBid) end
+  if AH.PostItem then hooksecurefunc(AH, "PostItem", OnPost) end
+  if AH.PostCommodity then hooksecurefunc(AH, "PostCommodity", OnPost) end
   lastMoney = GetMoney()
 end
 
@@ -248,6 +325,19 @@ local function MatchPendingBuys()
       spent = spent - p.cost
       ns.RecordPurchase(p.itemID, p.qty, p.cost)
       table.remove(pendingBuys, i)
+    end
+  end
+  -- Whatever was spent beyond purchases while a listing is pending is that listing's deposit.
+  while #pendingPosts > 0 do
+    local p = pendingPosts[1]
+    if GetTime() - p.t > 15 then
+      table.remove(pendingPosts, 1) -- never posted (e.g. needed confirmation and was cancelled)
+    elseif spent > 0 then
+      ns.RecordDeposit(p.itemID, p.qty, spent)
+      spent = 0
+      table.remove(pendingPosts, 1)
+    else
+      break
     end
   end
 end
@@ -363,7 +453,7 @@ f:SetScript("OnEvent", function(_, event, ...)
   elseif event == "COMMODITY_PURCHASE_FAILED" then
     commodityConfirm = nil
   elseif event == "PLAYER_MONEY" then
-    if #pendingBuys > 0 then MatchPendingBuys() else lastMoney = GetMoney() end
+    if #pendingBuys > 0 or #pendingPosts > 0 then MatchPendingBuys() else lastMoney = GetMoney() end
     if merchant then RequestMerchantDiff() end
   elseif event == "BAG_UPDATE_DELAYED" then
     if merchant then RequestMerchantDiff() end
