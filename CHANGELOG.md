@@ -6,7 +6,17 @@ Each version is a [GitHub release](https://github.com/regul4rj0hn/craft-shuffler
 
 ## [Unreleased]
 
+### Added
+- **Full scan** button on the Vendor flips tab and `/shuffle fullscan`, so flips no longer depend on Auctionator's
+  scan mode.
+- `/shuffle debug` prints diagnostic info for troubleshooting.
+
 ### Fixed
+- Vendor flips never appeared: Auctionator's Scan button runs an incremental scan by default, which has no
+  individual listings, and CraftShuffler silently found nothing. The tab now says when the last scan was incremental.
+- Listings whose item data the game hadn't loaded yet were skipped. Their data is now requested and the listings are
+  read again, up to 3 times.
+- Closing the AH cancels a pending full scan.
 - Release workflow: manual runs for older tags no longer mark that release as "Latest". Uses `actions/checkout@v5`.
 
 ## [0.2.0] - 2026-11-13

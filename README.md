@@ -45,6 +45,8 @@ Or copy the `CraftShuffler` folder from this repo. Requires
 | `/shuffle minprofit <gold>` | Minimum profit per craft to be flagged, e.g. `0.5` = 50s |
 | `/shuffle shop` | Create the Auctionator shopping list `CraftShuffler` with max prices (same as the **Shopping list** button) |
 | `/shuffle flips` | Open the Vendor flips tab (AH listings cheaper than their vendor price) |
+| `/shuffle fullscan` | Full AH scan for vendor flips (at the AH, once per 15 minutes) |
+| `/shuffle debug` | Print diagnostic info (scan state, Auctionator settings, counts) |
 | `/shuffle flipmin <gold>` | Minimum profit per flip listing, e.g. `0.01` = 1s |
 | `/shuffle duration 12\|24\|48` | Auction duration used for deposits (default 12h) |
 | `/shuffle reset` | Forget this character's recorded recipes |
@@ -86,10 +88,12 @@ risk-free profit, no crafting needed. The **Vendor flips** tab (`/shuffle flips`
 **full** Auctionator scan. For each item it shows the number of listings, the quantity, the most to pay per unit, the
 total cost and the profit.
 
-- At the AH, run a full scan from Auctionator's *Auctionator* tab. Auctionator allows one every 15 minutes. When the
-  scan finishes, CraftShuffler reads every listing the game downloaded and compares its unit price with the vendor
-  price. Bid-only and your own auctions are skipped. Incremental scans don't download individual listings, so they
-  don't update flips.
+- At the AH, click **Full scan** on the Vendor flips tab (or `/shuffle fullscan`). This downloads every listing, and
+  CraftShuffler compares each listing's unit price with the vendor price. Bid-only and your own auctions are skipped.
+  The AH allows one full scan every 15 minutes, shared with Auctionator.
+- Auctionator's own **Scan** button only does a full scan if *Use alternate slower scan mode by default* is ticked
+  in Auctionator's Advanced settings. It is off by default, and then Auctionator runs incremental scans. Those don't
+  include individual listings and can't find flips. With the option on, flips update after every Auctionator scan.
 - **Shopping list** on this tab creates the Auctionator list `CraftShuffler Flips`, capping each item at the highest
   profitable unit price.
 - Results are a snapshot of the scan, so other players may buy some listings first. The tab shows how old the scan is.
