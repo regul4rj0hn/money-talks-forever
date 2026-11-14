@@ -1,10 +1,17 @@
 # Changelog
 
-All notable changes to CraftShuffler. Versions follow [Semantic Versioning](https://semver.org/):
+All notable changes to Money Talks Forever (called CraftShuffler up to v0.4.0). Versions follow [Semantic Versioning](https://semver.org/):
 MAJOR for breaking changes (e.g. saved data that no longer loads), MINOR for new features, PATCH for fixes.
-Each version is a [GitHub release](https://github.com/regul4rj0hn/craft-shuffler/releases) with a ready-to-install zip.
+Each version is a [GitHub release](https://github.com/regul4rj0hn/money-talks-forever/releases) with a ready-to-install zip.
 
 ## [Unreleased]
+
+### Changed
+- **Renamed to Money Talks Forever.** The addon folder is now `MoneyTalksForever`, the command is `/mtf` (`/shuffle`
+  still works), and the Auctionator shopping lists are `Money Talks Forever` and `Money Talks Forever Flips`. The
+  GitHub repository is now `money-talks-forever`.
+- Existing CraftShuffler data is imported on first login when the old addon is still installed, and CraftShuffler is
+  then disabled.
 
 ## [0.4.0] - 2026-11-14
 
