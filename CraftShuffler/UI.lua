@@ -343,7 +343,8 @@ local PROFIT_COLS = {
   { key = "item",   label = "Item (all time)", width = 250, justify = "LEFT" },
   { key = "kind",   label = "Type",            width = 70,  justify = "LEFT" },
   { key = "qty",    label = "Sold",            width = 70,  justify = "RIGHT" },
-  { key = "earned", label = "Vendor paid",     width = 120, justify = "RIGHT" },
+  { key = "via",    label = "Via",             width = 70,  justify = "LEFT" },
+  { key = "earned", label = "Earned",          width = 120, justify = "RIGHT" },
   { key = "cost",   label = "Cost",            width = 120, justify = "RIGHT" },
   { key = "profit", label = "Profit",          width = 120, justify = "RIGHT" },
 }
@@ -366,6 +367,8 @@ local function InitProfitRow(row, it)
   row.cells.item:SetText(link or name or ("item:" .. it.itemID))
   row.cells.kind:SetText(it.kind == "crafts" and "|cff66ccffcraft|r" or "|cffffd100flip|r")
   row.cells.qty:SetText(it.qty)
+  local ah, vendor = (it.ahQty or 0) > 0, (it.vendorQty or 0) > 0
+  row.cells.via:SetText(ah and vendor and "both" or ah and "|cffffd100AH|r" or vendor and "vendor" or "")
   row.cells.earned:SetText(ns.Money(it.earned))
   row.cells.cost:SetText(ns.Money(it.cost))
   row.cells.profit:SetText(ProfitMoney(it.earned - it.cost))
@@ -385,14 +388,22 @@ local function CellTooltip(cell)
   local b = PeriodBucket(cell.period)
   GameTooltip:SetOwner(cell, "ANCHOR_TOP")
   local kinds = cell.kind == "total" and { "crafts", "flips" } or { cell.kind }
-  local earned, cost, qty, est = 0, 0, 0, 0
+  local earned, cost, qty, est, ahQty, ahEarned, deposits = 0, 0, 0, 0, 0, 0, 0
   for _, k in ipairs(kinds) do
-    earned, cost, qty, est = earned + b[k].earned, cost + b[k].cost, qty + b[k].qty, est + b[k].estimated
+    local x = b[k]
+    earned, cost, qty, est = earned + x.earned, cost + x.cost, qty + x.qty, est + x.estimated
+    ahQty, ahEarned, deposits = ahQty + (x.ahQty or 0), ahEarned + (x.ahEarned or 0), deposits + (x.deposits or 0)
   end
+  local W = 0.9
   GameTooltip:AddLine(cell.label)
-  GameTooltip:AddDoubleLine("Items sold", qty, 0.9, 0.9, 0.9, 1, 1, 1)
-  GameTooltip:AddDoubleLine("Vendor paid", ns.Money(earned), 0.9, 0.9, 0.9, 1, 1, 1)
-  GameTooltip:AddDoubleLine("Cost", ns.Money(cost), 0.9, 0.9, 0.9, 1, 1, 1)
+  GameTooltip:AddDoubleLine("Items sold", qty, W, W, W, 1, 1, 1)
+  GameTooltip:AddDoubleLine("  to vendors", ("%d for %s"):format(qty - ahQty, ns.Money(earned - ahEarned)), W, W, W, 1, 1, 1)
+  GameTooltip:AddDoubleLine("  on the AH (after cut)", ("%d for %s"):format(ahQty, ns.Money(ahEarned)), W, W, W, 1, 1, 1)
+  GameTooltip:AddDoubleLine("Earned", ns.Money(earned), W, W, W, 1, 1, 1)
+  GameTooltip:AddDoubleLine("Cost", ns.Money(cost), W, W, W, 1, 1, 1)
+  if deposits > 0 then
+    GameTooltip:AddDoubleLine("  of which AH deposits lost", ns.Money(deposits), W, W, W, 1, 1, 1)
+  end
   GameTooltip:AddDoubleLine("Profit", ProfitMoney(earned - cost), 0.9, 0.9, 0.9, 1, 1, 1)
   if est > 0 then
     GameTooltip:AddLine(("%s of the cost is estimated: reagents you didn't buy while tracking, valued at market price.")
@@ -466,7 +477,8 @@ local function RefreshProfit(panel)
 
   local list = {}
   for itemID, it in pairs(ns.Ledger().items) do
-    table.insert(list, { itemID = itemID, kind = it.kind, qty = it.qty, earned = it.earned, cost = it.cost })
+    table.insert(list, { itemID = itemID, kind = it.kind, qty = it.qty, earned = it.earned, cost = it.cost,
+      ahQty = it.ahQty, vendorQty = it.vendorQty })
   end
   table.sort(list, function(a, b)
     local pa, pb = a.earned - a.cost, b.earned - b.cost
@@ -475,7 +487,8 @@ local function RefreshProfit(panel)
   end)
   panel.scrollBox:SetDataProvider(CreateDataProvider(list), ScrollBoxConstants.RetainScrollPosition)
   panel.empty:SetText(#list == 0 and
-    "Nothing sold yet.\nBuy reagents or flips on the AH, craft, and sell to a vendor: profits show up here." or "")
+    "Nothing sold yet.\nBuy reagents or flips on the AH, craft, and sell to a vendor or on the AH:\nprofits show up here."
+    or "")
   frame.summary:SetText("")
 end
 
