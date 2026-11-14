@@ -11,5 +11,6 @@ Pricing.lua
 AuctionHouse.lua
 Flips.lua
 Ledger.lua
+Mail.lua
 Scanner.lua
 UI.lua
