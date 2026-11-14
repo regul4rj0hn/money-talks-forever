@@ -265,6 +265,75 @@ local function SimpleButton(parent, text, width, onClick, tipTitle, tipText)
   return b
 end
 
+---------------------------------------------------------------------------
+-- Full scan progress bar (flips tab footer)
+---------------------------------------------------------------------------
+local function Num(n)
+  return BreakUpLargeNumbers and BreakUpLargeNumbers(n) or tostring(n)
+end
+
+-- Text and fill (0..1, or nil for none) for the current progress state.
+local function ProgressText(p)
+  local now = GetTime()
+  if p.phase == "waiting" then
+    return ("Waiting for the AH to send all listings... %ds (gives up after %ds)"):format(
+      math.floor(now - p.startedAt), p.timeout), nil
+  elseif p.phase == "reading" then
+    local pct = p.total > 0 and p.done / p.total or 0
+    local try = (p.attempt or 1) > 1 and (" - try %d/3"):format(p.attempt) or ""
+    return ("Reading listings %s / %s (%d%%)%s"):format(Num(p.done), Num(p.total), math.floor(pct * 100), try), pct
+  elseif p.phase == "loading" then
+    return ("Loading details for %s listing(s), reading again in %ds (try %d/3)"):format(
+      Num(p.skipped), math.max(0, math.ceil(p.retryAt - now)), p.attempt), 1
+  end
+  return "", nil
+end
+
+local function UpdateProgress(bar)
+  local p = ns.flipProgress
+  bar:SetShown(p ~= nil)
+  if not p then return end
+  local text, fill = ProgressText(p)
+  bar.label:SetText(text)
+  bar:SetValue(fill or 0)
+  if p.phase == "loading" then bar:SetStatusBarColor(0.9, 0.7, 0.1) else bar:SetStatusBarColor(0.2, 0.55, 1) end
+end
+
+local function CreateProgressBar(parent, anchor)
+  local bar = CreateFrame("StatusBar", nil, parent)
+  bar:SetSize(420, 18)
+  bar:SetPoint("LEFT", anchor, "RIGHT", 10, 0)
+  bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
+  bar:SetMinMaxValues(0, 1)
+  local bg = bar:CreateTexture(nil, "BACKGROUND")
+  bg:SetAllPoints()
+  bg:SetColorTexture(0, 0, 0, 0.5)
+  bar.label = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  bar.label:SetPoint("CENTER")
+  -- Waiting/loading have no game events to update on, so tick the elapsed time while visible.
+  local acc = 0
+  bar:SetScript("OnUpdate", function(self, elapsed)
+    acc = acc + elapsed
+    if acc >= 0.25 then
+      acc = 0
+      UpdateProgress(self)
+    end
+  end)
+  bar:Hide()
+  return bar
+end
+
+local lastPhase
+function ns.OnFlipProgress()
+  if not frame then return end
+  UpdateProgress(frame.progress)
+  local phase = ns.flipProgress and ns.flipProgress.phase
+  if phase ~= lastPhase then
+    lastPhase = phase
+    ns.RefreshUI() -- phase changes affect the list's empty-state text
+  end
+end
+
 local function CreateUI()
   local width = math.max(TableWidth(COLS), TableWidth(FLIP_COLS))
 
@@ -317,6 +386,7 @@ local function CreateUI()
     "Downloads every AH listing and looks for items below vendor price. Must be at the AH. "
     .. "The AH allows one full scan every 15 minutes, shared with Auctionator.")
   fullScan:SetPoint("TOPLEFT", frame.panels.flips, "BOTTOMLEFT", 12, -8)
+  frame.progress = CreateProgressBar(frame.panels.flips, fullScan)
 
   -- Footer: buttons act on the current tab
   local refresh = SimpleButton(frame, "Refresh", 90, function()
@@ -406,7 +476,12 @@ function ns.RefreshUI()
   local tab = ns.Settings().tab == "flips" and "flips" or "crafts"
   for name, panel in pairs(frame.panels) do panel:SetShown(name == tab) end
   for name, b in pairs(frame.tabButtons) do b:SetEnabled(name ~= tab) end -- active tab looks pressed
-  if tab == "flips" then RefreshFlips(frame.panels.flips) else RefreshCrafts(frame.panels.crafts) end
+  if tab == "flips" then
+    RefreshFlips(frame.panels.flips)
+    UpdateProgress(frame.progress)
+  else
+    RefreshCrafts(frame.panels.crafts)
+  end
 end
 
 function ns.ShowTab(tab)
