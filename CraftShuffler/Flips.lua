@@ -14,6 +14,17 @@ function ns.LoadSavedFlips()
   if saved then ns.flips = saved end
 end
 
+-- Progress of the current flips scan, for the UI. nil when idle, otherwise one of:
+--   { phase = "waiting", startedAt, timeout }         full scan requested, AH hasn't sent the listings yet
+--   { phase = "reading", done, total, attempt }        going through the listings
+--   { phase = "loading", skipped, attempt, retryAt }   waiting for item details before reading again
+ns.flipProgress = nil
+local function SetProgress(p)
+  ns.flipProgress = p
+  if ns.OnFlipProgress then ns.OnFlipProgress() end
+end
+ns.SetFlipProgress = SetProgress
+
 local MAX_ATTEMPTS = 3   -- re-read the listings while the game loads item data we didn't have yet
 local RETRY_DELAY = 5
 
@@ -33,6 +44,7 @@ function ns.ScanReplicateForFlips(force, attempt)
   end
 
   ns.flipScanRunning = true
+  SetProgress({ phase = "reading", done = 0, total = n, attempt = attempt })
   local me = UnitName("player")
   local minProfit = ns.Settings().flipMinProfit
   local byItem, skipped, requested = {}, 0, {}
@@ -54,10 +66,15 @@ function ns.ScanReplicateForFlips(force, attempt)
       if attempt == 1 then
         ns.Print(("loading details for %d listing(s), rescanning shortly..."):format(skipped))
       end
-      C_Timer.After(RETRY_DELAY, function() ns.ScanReplicateForFlips(true, attempt + 1) end)
+      SetProgress({ phase = "loading", skipped = skipped, attempt = attempt + 1, retryAt = GetTime() + RETRY_DELAY })
+      C_Timer.After(RETRY_DELAY, function()
+        -- The listings can be gone by now (e.g. AH closed); then keep what we have.
+        if not ns.ScanReplicateForFlips(true, attempt + 1) then SetProgress(nil) end
+      end)
       if ns.RefreshUI then ns.RefreshUI() end
       return
     end
+    SetProgress(nil)
 
     local total = 0
     for _, e in ipairs(items) do total = total + e.profit end
@@ -100,6 +117,10 @@ function ns.ScanReplicateForFlips(force, attempt)
       end
     end
     index = last + 1
+    if ns.flipProgress then
+      ns.flipProgress.done = index
+      if ns.OnFlipProgress then ns.OnFlipProgress() end
+    end
     if index < n then
       C_Timer.After(0, Step)
     else
@@ -117,12 +138,14 @@ end
 local FULL_SCAN_TIMEOUT = 90
 
 local scanFrame = CreateFrame("Frame")
+local scanID = 0 -- identifies the current request, so an old timeout can't cancel a newer scan
 
 function ns.OnReplicateListUpdate()
   if not ns.fullScanPending then return end
   ns.fullScanPending = false
   scanFrame:UnregisterEvent("REPLICATE_ITEM_LIST_UPDATE")
   if not ns.ScanReplicateForFlips(true) then
+    SetProgress(nil)
     ns.Print("the full scan returned no listings.")
   end
   if ns.RefreshUI then ns.RefreshUI() end
@@ -136,6 +159,7 @@ function ns.CancelFullScan()
   if not ns.fullScanPending then return end
   ns.fullScanPending = false
   scanFrame:UnregisterEvent("REPLICATE_ITEM_LIST_UPDATE")
+  SetProgress(nil)
 end
 
 -- Asks the game for every AH listing (C_AuctionHouse.ReplicateItems). The AH allows one such scan per
@@ -151,15 +175,19 @@ function ns.StartFullScan()
     return
   end
   ns.fullScanPending = true
+  scanID = scanID + 1
+  local myID = scanID
   scanFrame:RegisterEvent("REPLICATE_ITEM_LIST_UPDATE")
   C_AuctionHouse.ReplicateItems()
-  ns.Print("full scan requested, this can take a minute on a busy AH...")
+  SetProgress({ phase = "waiting", startedAt = GetTime(), timeout = FULL_SCAN_TIMEOUT })
+  ns.Print("full scan requested, waiting for the auction house to send all listings...")
   if ns.RefreshUI then ns.RefreshUI() end
 
   C_Timer.After(FULL_SCAN_TIMEOUT, function()
-    if not ns.fullScanPending then return end
+    if not ns.fullScanPending or scanID ~= myID then return end
     ns.fullScanPending = false
     scanFrame:UnregisterEvent("REPLICATE_ITEM_LIST_UPDATE")
+    SetProgress(nil)
     ns.Print("the AH did not answer the full scan. It allows one every 15 minutes (shared with Auctionator), "
       .. "so try again later.")
     if ns.RefreshUI then ns.RefreshUI() end
