@@ -214,9 +214,9 @@ local function TableWidth(cols)
 end
 
 -- A panel with column headers and a scrolling list, filling the window between tabs and footer.
-local function CreateTable(parent, cols, initializer)
+local function CreateTable(parent, cols, initializer, top)
   local panel = CreateFrame("Frame", nil, parent)
-  panel:SetPoint("TOPLEFT", 0, -56)
+  panel:SetPoint("TOPLEFT", 0, top or -56)
   panel:SetPoint("BOTTOMRIGHT", 0, 40)
 
   local x = 16
@@ -334,6 +334,168 @@ function ns.OnFlipProgress()
   end
 end
 
+---------------------------------------------------------------------------
+-- Profit tab: summary (session / today / all time) and per-item breakdown
+---------------------------------------------------------------------------
+local PROFIT_TOP = -56 - 104 -- the item list starts below the summary block
+
+local PROFIT_COLS = {
+  { key = "item",   label = "Item (all time)", width = 250, justify = "LEFT" },
+  { key = "kind",   label = "Type",            width = 70,  justify = "LEFT" },
+  { key = "qty",    label = "Sold",            width = 70,  justify = "RIGHT" },
+  { key = "earned", label = "Vendor paid",     width = 120, justify = "RIGHT" },
+  { key = "cost",   label = "Cost",            width = 120, justify = "RIGHT" },
+  { key = "profit", label = "Profit",          width = 120, justify = "RIGHT" },
+}
+
+local function ProfitMoney(p)
+  return ((p or 0) >= 0 and "|cff00ff00" or "|cffff4040") .. ns.Money(p or 0) .. "|r"
+end
+
+local function InitProfitRow(row, it)
+  if not row.cells then
+    BuildCells(row, PROFIT_COLS, function(self)
+      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+      GameTooltip:SetItemByID(self.data.itemID)
+      GameTooltip:Show()
+    end)
+  end
+  row.data = it
+  local name, link, _, _, _, _, _, _, _, icon = C_Item.GetItemInfo(it.itemID)
+  row.icon:SetTexture(icon or 134400)
+  row.cells.item:SetText(link or name or ("item:" .. it.itemID))
+  row.cells.kind:SetText(it.kind == "crafts" and "|cff66ccffcraft|r" or "|cffffd100flip|r")
+  row.cells.qty:SetText(it.qty)
+  row.cells.earned:SetText(ns.Money(it.earned))
+  row.cells.cost:SetText(ns.Money(it.cost))
+  row.cells.profit:SetText(ProfitMoney(it.earned - it.cost))
+end
+
+local PERIODS = { { key = "session", label = "This session" }, { key = "today", label = "Today" }, { key = "all", label = "All time" } }
+local KINDS = { { key = "crafts", label = "Crafts" }, { key = "flips", label = "Flips" }, { key = "total", label = "Total" } }
+
+local function PeriodBucket(key)
+  local L = ns.Ledger()
+  if key == "session" then return ns.session end
+  if key == "today" then return L.days[date("%Y-%m-%d")] or ns.NewLedgerBucket() end
+  return L.all
+end
+
+local function CellTooltip(cell)
+  local b = PeriodBucket(cell.period)
+  GameTooltip:SetOwner(cell, "ANCHOR_TOP")
+  local kinds = cell.kind == "total" and { "crafts", "flips" } or { cell.kind }
+  local earned, cost, qty, est = 0, 0, 0, 0
+  for _, k in ipairs(kinds) do
+    earned, cost, qty, est = earned + b[k].earned, cost + b[k].cost, qty + b[k].qty, est + b[k].estimated
+  end
+  GameTooltip:AddLine(cell.label)
+  GameTooltip:AddDoubleLine("Items sold", qty, 0.9, 0.9, 0.9, 1, 1, 1)
+  GameTooltip:AddDoubleLine("Vendor paid", ns.Money(earned), 0.9, 0.9, 0.9, 1, 1, 1)
+  GameTooltip:AddDoubleLine("Cost", ns.Money(cost), 0.9, 0.9, 0.9, 1, 1, 1)
+  GameTooltip:AddDoubleLine("Profit", ProfitMoney(earned - cost), 0.9, 0.9, 0.9, 1, 1, 1)
+  if est > 0 then
+    GameTooltip:AddLine(("%s of the cost is estimated: reagents you didn't buy while tracking, valued at market price.")
+      :format(ns.Money(est)), 0.6, 0.6, 0.6, true)
+  end
+  GameTooltip:Show()
+end
+
+local function CreateProfitSummary(panel)
+  local box = CreateFrame("Frame", nil, panel)
+  box:SetPoint("BOTTOMLEFT", panel, "TOPLEFT", 16, 8)
+  box:SetSize(700, 96)
+  box.cells = {}
+  local LABEL_W, CELL_W, ROW = 90, 150, 18
+  for i, period in ipairs(PERIODS) do
+    local h = box:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    h:SetPoint("TOPLEFT", LABEL_W + (i - 1) * CELL_W, 0)
+    h:SetWidth(CELL_W - 10)
+    h:SetJustifyH("RIGHT")
+    h:SetText(period.label)
+  end
+  for r, kind in ipairs(KINDS) do
+    local l = box:CreateFontString(nil, "OVERLAY", kind.key == "total" and "GameFontNormal" or "GameFontHighlightSmall")
+    l:SetPoint("TOPLEFT", 0, -r * ROW)
+    l:SetText(kind.label)
+    for i, period in ipairs(PERIODS) do
+      local cell = CreateFrame("Frame", nil, box)
+      cell:SetPoint("TOPLEFT", LABEL_W + (i - 1) * CELL_W, -r * ROW)
+      cell:SetSize(CELL_W - 10, ROW)
+      cell:EnableMouse(true)
+      cell.period, cell.kind = period.key, kind.key
+      cell.label = kind.label .. " - " .. period.label
+      cell.text = cell:CreateFontString(nil, "OVERLAY", kind.key == "total" and "GameFontNormal" or "GameFontHighlightSmall")
+      cell.text:SetAllPoints()
+      cell.text:SetJustifyH("RIGHT")
+      cell:SetScript("OnEnter", CellTooltip)
+      cell:SetScript("OnLeave", GameTooltip_Hide)
+      table.insert(box.cells, cell)
+    end
+  end
+  box.info = box:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  box.info:SetPoint("TOPLEFT", 0, -4 * ROW - 6)
+  box.info:SetJustifyH("LEFT")
+  panel.summaryBox = box
+end
+
+local function Duration(seconds)
+  local h, m = math.floor(seconds / 3600), math.floor(seconds % 3600 / 60)
+  return h > 0 and ("%dh %dm"):format(h, m) or ("%dm"):format(m)
+end
+
+local function RefreshProfit(panel)
+  local box = panel.summaryBox
+  for _, cell in ipairs(box.cells) do
+    local b = PeriodBucket(cell.period)
+    local p = cell.kind == "total" and ns.BucketProfit(b) or (b[cell.kind].earned - b[cell.kind].cost)
+    cell.text:SetText(ProfitMoney(p))
+  end
+
+  local parts = {}
+  if ns.sessionStart then
+    local secs = math.max(60, GetTime() - ns.sessionStart)
+    table.insert(parts, ("Session %s: %s/hour"):format(Duration(secs), ProfitMoney(ns.BucketProfit(ns.session) * 3600 / secs)))
+  end
+  local value, n = ns.LedgerStockValue()
+  if n > 0 then
+    table.insert(parts, ("Unsold: %d item(s) bought/crafted for %s"):format(n, ns.Money(value)))
+  end
+  table.insert(parts, "Tracking since " .. date("%Y-%m-%d", ns.Ledger().since))
+  box.info:SetText(table.concat(parts, "   |   "))
+
+  local list = {}
+  for itemID, it in pairs(ns.Ledger().items) do
+    table.insert(list, { itemID = itemID, kind = it.kind, qty = it.qty, earned = it.earned, cost = it.cost })
+  end
+  table.sort(list, function(a, b)
+    local pa, pb = a.earned - a.cost, b.earned - b.cost
+    if pa ~= pb then return pa > pb end
+    return a.itemID < b.itemID
+  end)
+  panel.scrollBox:SetDataProvider(CreateDataProvider(list), ScrollBoxConstants.RetainScrollPosition)
+  panel.empty:SetText(#list == 0 and
+    "Nothing sold yet.\nBuy reagents or flips on the AH, craft, and sell to a vendor: profits show up here." or "")
+  frame.summary:SetText("")
+end
+
+StaticPopupDialogs["CRAFTSHUFFLER_RESET_LEDGER"] = {
+  text = "Reset CraftShuffler's profit history for this character?",
+  button1 = YES, button2 = NO,
+  OnAccept = function() ns.ResetLedger() end,
+  timeout = 0, whileDead = true, hideOnEscape = true,
+}
+
+local ledgerRefreshPending = false
+function ns.OnLedgerChanged()
+  if not frame or not frame:IsShown() or ns.Settings().tab ~= "profit" or ledgerRefreshPending then return end
+  ledgerRefreshPending = true
+  C_Timer.After(0.5, function()
+    ledgerRefreshPending = false
+    ns.RefreshUI()
+  end)
+end
+
 local function CreateUI()
   local width = math.max(TableWidth(COLS), TableWidth(FLIP_COLS))
 
@@ -358,13 +520,16 @@ local function CreateUI()
   frame.tabButtons = {
     crafts = SimpleButton(frame, "Crafts", 100, function() ns.ShowTab("crafts") end),
     flips = SimpleButton(frame, "Vendor flips", 110, function() ns.ShowTab("flips") end),
+    profit = SimpleButton(frame, "Profit", 90, function() ns.ShowTab("profit") end),
   }
   frame.tabButtons.crafts:SetPoint("TOPLEFT", 12, -28)
   frame.tabButtons.flips:SetPoint("LEFT", frame.tabButtons.crafts, "RIGHT", 4, 0)
+  frame.tabButtons.profit:SetPoint("LEFT", frame.tabButtons.flips, "RIGHT", 4, 0)
 
   frame.panels = {
     crafts = CreateTable(frame, COLS, InitRow),
     flips = CreateTable(frame, FLIP_COLS, InitFlipRow),
+    profit = CreateTable(frame, PROFIT_COLS, InitProfitRow, PROFIT_TOP),
   }
 
   -- Footer (crafts tab): filter checkbox
@@ -388,9 +553,18 @@ local function CreateUI()
   fullScan:SetPoint("TOPLEFT", frame.panels.flips, "BOTTOMLEFT", 12, -8)
   frame.progress = CreateProgressBar(frame.panels.flips, fullScan)
 
+  -- Profit tab: summary block and reset
+  CreateProfitSummary(frame.panels.profit)
+  local reset = SimpleButton(frame.panels.profit, "Reset", 80, function()
+    StaticPopup_Show("CRAFTSHUFFLER_RESET_LEDGER")
+  end, "Reset profit history", "Clears this character's tracked purchases, stock and profits.")
+  reset:SetPoint("TOPLEFT", frame.panels.profit, "BOTTOMLEFT", 12, -8)
+
   -- Footer: buttons act on the current tab
   local refresh = SimpleButton(frame, "Refresh", 90, function()
-    if ns.Settings().tab == "flips" then
+    if ns.Settings().tab == "profit" then
+      ns.RefreshUI()
+    elseif ns.Settings().tab == "flips" then
       if not ns.ScanReplicateForFlips(true) then
         ns.Print("no full scan data to read. At the AH, click Full scan.")
       end
@@ -407,6 +581,7 @@ local function CreateUI()
     "Crafts tab: the 'CraftShuffler' list of reagents for your Shuffle me! recipes, capped at the most you can pay. "
     .. "Vendor flips tab: the 'CraftShuffler Flips' list, capped below vendor price. Buy every listing up to the cap.")
   shop:SetPoint("RIGHT", refresh, "LEFT", -6, 0)
+  frame.shopButton = shop
 
   frame.summary = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   frame.summary:SetPoint("RIGHT", shop, "LEFT", -10, 0)
@@ -473,10 +648,14 @@ end
 
 function ns.RefreshUI()
   if not frame or not frame:IsShown() then return end
-  local tab = ns.Settings().tab == "flips" and "flips" or "crafts"
+  local tab = ns.Settings().tab
+  if not frame.panels[tab] then tab = "crafts" end
   for name, panel in pairs(frame.panels) do panel:SetShown(name == tab) end
   for name, b in pairs(frame.tabButtons) do b:SetEnabled(name ~= tab) end -- active tab looks pressed
-  if tab == "flips" then
+  frame.shopButton:SetShown(tab ~= "profit")
+  if tab == "profit" then
+    RefreshProfit(frame.panels.profit)
+  elseif tab == "flips" then
     RefreshFlips(frame.panels.flips)
     UpdateProgress(frame.progress)
   else
