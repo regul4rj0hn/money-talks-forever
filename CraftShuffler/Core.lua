@@ -91,6 +91,7 @@ frame:SetScript("OnEvent", function(_, event, arg1)
     CraftShufflerDB.settings = CraftShufflerDB.settings or {}
     CraftShufflerDB.deposits = CraftShufflerDB.deposits or {}   -- [itemID][duration] = per-unit deposit
     CraftShufflerDB.flips = CraftShufflerDB.flips or {}         -- [realm] = last vendor flips scan
+    CraftShufflerDB.ledger = CraftShufflerDB.ledger or {}       -- [charKey] = profit-so-far ledger
     for k, v in pairs(DEFAULTS) do
       if CraftShufflerDB.settings[k] == nil then CraftShufflerDB.settings[k] = v end
     end
@@ -130,6 +131,13 @@ function ns.PrintDebug()
   local recipes = 0
   for _ in pairs(ns.CharStore().recipes) do recipes = recipes + 1 end
   print(("  recipes recorded: %d, evaluated rows: %d"):format(recipes, #ns.results))
+  local L = ns.Ledger()
+  local bought, crafted, sold = 0, 0, 0
+  for _ in pairs(L.bought) do bought = bought + 1 end
+  for _ in pairs(L.crafted) do crafted = crafted + 1 end
+  for _ in pairs(L.items) do sold = sold + 1 end
+  print(("  ledger: %d bought and %d crafted item types in stock, %d item types sold, all-time profit %s"):format(
+    bought, crafted, sold, ns.Money(ns.BucketProfit(L.all))))
 end
 
 ---------------------------------------------------------------------------
@@ -151,6 +159,8 @@ local function Help()
   print("  /shuffle shop - create an Auctionator shopping list of reagents with max prices")
   print("  /shuffle flips - show AH listings cheaper than their vendor price (needs a full Auctionator scan)")
   print("  /shuffle flipmin <gold> - minimum profit per flip listing (now " .. ns.Money(s.flipMinProfit) .. ")")
+  print("  /shuffle profit - show what you've made (crafts and flips sold to vendors)")
+  print("  /shuffle profit reset - clear this character's profit history")
   print("  /shuffle fullscan - full AH scan for vendor flips (at the AH, once per 15 min)")
   print("  /shuffle debug - print diagnostic info")
   print("  /shuffle duration 12|24|48 - auction duration for deposits (now " .. ns.DURATION_HOURS[s.ahDuration] .. "h)")
@@ -206,6 +216,14 @@ SlashCmdList.CRAFTSHUFFLER = function(msg)
     ns.ShowTab("flips")
     if not ns.ScanReplicateForFlips(true) and not ns.flips.scannedAt then
       Print("no full scan data yet - at the AH, run a full scan in Auctionator's Auctionator tab.")
+    end
+  elseif cmd == "profit" then
+    if rest == "reset" then
+      StaticPopup_Show("CRAFTSHUFFLER_RESET_LEDGER")
+    else
+      ns.ShowTab("profit")
+      local b, L = ns.session, ns.Ledger()
+      Print(("profit this session %s, all time %s"):format(ns.Money(ns.BucketProfit(b)), ns.Money(ns.BucketProfit(L.all))))
     end
   elseif cmd == "fullscan" then
     ns.ShowTab("flips")
