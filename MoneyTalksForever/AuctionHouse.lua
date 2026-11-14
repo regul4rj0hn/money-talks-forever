@@ -1,12 +1,17 @@
--- Money Talks Forever: AH-vs-vendor verdict (deposits) and Auctionator shopping list with max prices.
+-- Money Talks Forever: AH deposits, the AH-vs-vendor verdict and the reagent shopping list.
 local _, ns = ...
 
 -- Durations as used by C_AuctionHouse: 1 = 12h, 2 = 24h, 3 = 48h.
 ns.DURATION_HOURS = { 12, 24, 48 }
 
--- Fallback when no real deposit has been recorded yet: a fraction of the vendor price per 12h.
--- This is a rough estimate; real values are recorded whenever you visit the AH.
+-- Fallback until a real deposit is measured at the AH: a fraction of the vendor price per 12h (a rough guess).
 local ESTIMATE_RATE_PER_12H = 0.15
+-- Commodity deposits are measured on a stack and divided, so rounding doesn't dominate cheap items.
+local MEASURE_QTY = 20
+
+ns.ahOpen = false
+ns.On("AUCTION_HOUSE_SHOW", function() ns.ahOpen = true end)
+ns.On("AUCTION_HOUSE_CLOSED", function() ns.ahOpen = false end)
 
 ---------------------------------------------------------------------------
 -- Deposits
@@ -15,74 +20,63 @@ local ESTIMATE_RATE_PER_12H = 0.15
 -- Per-unit deposit for listing itemID at the configured duration. Returns deposit, isEstimate.
 function ns.GetDeposit(itemID, unitSellPrice)
   local duration = ns.Settings().ahDuration
-  local rec = MoneyTalksForeverDB.deposits[itemID]
-  if rec and rec[duration] then return rec[duration], false end
+  local known = MoneyTalksForeverDB.deposits[itemID]
+  if known and known[duration] then return known[duration], false end
   local hours = ns.DURATION_HOURS[duration] or 12
   return (unitSellPrice or 0) * ESTIMATE_RATE_PER_12H * (hours / 12), true
 end
 
-local function FindInBags(wanted)
-  local found = {}
-  if not C_Container then return found end
-  for bag = 0, (NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4) do
-    for slot = 1, C_Container.GetContainerNumSlots(bag) or 0 do
-      local id = C_Container.GetContainerItemID(bag, slot)
-      if id and wanted[id] and not found[id] then found[id] = { bag = bag, slot = slot } end
+-- Measures one item's per-unit deposit. Items in your bags are measured exactly (commodity or not);
+-- others can only be measured if they are commodities.
+local function MeasureDeposit(itemID, duration, bagSlot)
+  local AH = C_AuctionHouse
+  if bagSlot and ItemLocation then
+    local loc = ItemLocation:CreateFromBagAndSlot(bagSlot.bag, bagSlot.slot)
+    local status = ns.SafeNumber(AH.GetItemCommodityStatus, loc)
+    local commodity = Enum.ItemCommodityStatus and Enum.ItemCommodityStatus.Commodity
+    if status and status ~= commodity then
+      return ns.SafeNumber(AH.CalculateItemDeposit, loc, duration, 1)
     end
   end
-  return found
+  local d = ns.SafeNumber(AH.CalculateCommodityDeposit, itemID, duration, MEASURE_QTY)
+  return d and d / MEASURE_QTY
 end
 
-local function TryCall(fn, ...)
-  if not fn then return nil end
-  local ok, v = pcall(fn, ...)
-  if ok and type(v) == "number" then return v end
-  return nil
-end
-
--- While the AH is open, ask the game for the real deposit of every crafted item we show.
--- Items in your bags are measured exactly (commodity or not); others are tried as commodities.
+-- While the AH is open, records the real deposit of every crafted item we show that isn't known yet.
 function ns.CaptureDeposits()
-  local AH = C_AuctionHouse
-  if not ns.ahOpen or not AH then return end
+  if not ns.ahOpen or not C_AuctionHouse then return end
   local duration = ns.Settings().ahDuration
-  local QTY = 20 -- measure on a stack and divide, so rounding doesn't dominate cheap items
+  local deposits = MoneyTalksForeverDB.deposits
 
   local wanted = {}
   for _, r in ipairs(ns.results) do
-    if r.auctionValue then wanted[r.itemID] = true end
+    local known = deposits[r.itemID]
+    if r.auctionValue and not (known and known[duration]) then wanted[r.itemID] = true end
   end
-  local inBags = FindInBags(wanted)
+  if not next(wanted) then return end
+
+  local inBags = {}
+  ns.ForEachBagItem(function(bag, slot, itemID)
+    if wanted[itemID] and not inBags[itemID] then inBags[itemID] = { bag = bag, slot = slot } end
+  end)
 
   local changed = false
   for itemID in pairs(wanted) do
-    local perUnit
-    local where = inBags[itemID]
-    if where and ItemLocation then
-      local loc = ItemLocation:CreateFromBagAndSlot(where.bag, where.slot)
-      local status = TryCall(AH.GetItemCommodityStatus, loc)
-      local commodity = Enum.ItemCommodityStatus and Enum.ItemCommodityStatus.Commodity
-      if status and status == commodity then
-        local d = TryCall(AH.CalculateCommodityDeposit, itemID, duration, QTY)
-        perUnit = d and d / QTY
-      elseif status then
-        perUnit = TryCall(AH.CalculateItemDeposit, loc, duration, 1)
-      end
-    else
-      local d = TryCall(AH.CalculateCommodityDeposit, itemID, duration, QTY)
-      perUnit = d and d / QTY
-    end
+    local perUnit = MeasureDeposit(itemID, duration, inBags[itemID])
     if perUnit then
-      local rec = MoneyTalksForeverDB.deposits[itemID] or {}
-      if rec[duration] ~= perUnit then
-        rec[duration] = perUnit
-        MoneyTalksForeverDB.deposits[itemID] = rec
-        changed = true
-      end
+      deposits[itemID] = deposits[itemID] or {}
+      deposits[itemID][duration] = perUnit
+      changed = true
     end
   end
   if changed then ns.RequestEvaluate(0.5) end
 end
+
+ns.On("AUCTION_HOUSE_SHOW", function() C_Timer.After(1, ns.CaptureDeposits) end)
+-- New crafted items in your bags can be measured exactly; bursts of bag updates (buying) collapse into one.
+ns.On("BAG_UPDATE_DELAYED", function()
+  if ns.ahOpen then ns.Debounce("deposits", 1, ns.CaptureDeposits) end
+end)
 
 ---------------------------------------------------------------------------
 -- AH vs vendor verdict
@@ -90,7 +84,7 @@ end
 -- An unsold auction comes back by mail and can still be vendored, so listing risks only the deposit.
 -- With sell chance p:  EV(list) = p * net + (1 - p) * (vendor - deposit),  EV(vendor) = vendor.
 -- Listing wins when  p > deposit / (net - vendor + deposit).
--- Returns "ah" | "vendor", break-even sell chance (0..1) for "ah".
+-- Returns "ah" | "vendor", and the break-even sell chance (0..1) for "ah".
 function ns.SaleVerdict(res)
   if not res.auctionNet then return "vendor", nil end
   local gain = res.auctionNet - (res.vendorValue or 0)
@@ -100,12 +94,13 @@ function ns.SaleVerdict(res)
 end
 
 ---------------------------------------------------------------------------
--- Shopping list
+-- Reagent shopping list
 ---------------------------------------------------------------------------
 ns.SHOPPING_LIST_NAME = "Money Talks Forever"
 
 -- Highest price per reagent you can pay and still make the minimum profit, over all "Shuffle me!" recipes.
--- Returns sorted list of { itemID, name, maxPrice, unit, recipes = n } plus vendor-bought reagents.
+-- Returns a list of { itemID, name, maxPrice, unit, recipes } sorted by name, and { [itemID] = name } of
+-- reagents bought from NPC vendors.
 function ns.CollectShoppingCaps()
   local caps, vendorItems = {}, {}
   for _, r in ipairs(ns.results) do
@@ -131,36 +126,27 @@ function ns.CollectShoppingCaps()
   return list, vendorItems
 end
 
-function ns.CreateShoppingList()
-  local api = ns.AuctionatorAPI()
-  if not api or not api.CreateShoppingList or not api.ConvertToSearchString then
-    ns.Print("Auctionator shopping lists are not available.")
-    return
-  end
+function ns.CreateReagentShoppingList()
   ns.Evaluate()
   local caps, vendorItems = ns.CollectShoppingCaps()
 
-  local searchStrings = {}
+  local terms = {}
   for _, c in ipairs(caps) do
     local name = C_Item.GetItemNameByID and C_Item.GetItemNameByID(c.itemID) or C_Item.GetItemInfo(c.itemID)
-    if name then
-      local ok, s = pcall(api.ConvertToSearchString, ns.CALLER_ID,
-        { searchString = name, isExact = true, maxPrice = c.maxPrice })
-      if ok and type(s) == "string" then table.insert(searchStrings, s) end
-    end
+    if name then table.insert(terms, { name = name, maxPrice = c.maxPrice }) end
   end
-  if #searchStrings == 0 then
+  if #terms == 0 then
     ns.Print("nothing to buy - no 'Shuffle me!' recipe has room to pay more than current prices.")
     return
   end
-
-  local ok, err = pcall(api.CreateShoppingList, ns.CALLER_ID, ns.SHOPPING_LIST_NAME, searchStrings)
-  if not ok then
-    ns.Print("could not create shopping list: " .. tostring(err))
+  local added, err = ns.CreateAuctionatorList(ns.SHOPPING_LIST_NAME, terms)
+  if not added then
+    ns.Print(err)
     return
   end
+
   ns.Print(("created Auctionator shopping list '%s' with %d reagent(s). Buy every listing up to:")
-    :format(ns.SHOPPING_LIST_NAME, #searchStrings))
+    :format(ns.SHOPPING_LIST_NAME, added))
   for _, c in ipairs(caps) do
     print(("  %s  <=  %s each  (now %s, %d recipe%s)"):format(
       c.name, ns.Money(c.maxPrice), ns.Money(c.unit), c.recipes, c.recipes == 1 and "" or "s"))
@@ -172,22 +158,3 @@ function ns.CreateShoppingList()
     print("  from an NPC vendor: " .. table.concat(vendorNames, ", "))
   end
 end
-
----------------------------------------------------------------------------
--- Events
----------------------------------------------------------------------------
-local f = CreateFrame("Frame")
-f:RegisterEvent("AUCTION_HOUSE_SHOW")
-f:RegisterEvent("AUCTION_HOUSE_CLOSED")
-f:RegisterEvent("BAG_UPDATE_DELAYED")
-f:SetScript("OnEvent", function(_, event)
-  if event == "AUCTION_HOUSE_SHOW" then
-    ns.ahOpen = true
-    C_Timer.After(1, ns.CaptureDeposits)
-  elseif event == "AUCTION_HOUSE_CLOSED" then
-    ns.ahOpen = false
-    ns.CancelFullScan()
-  elseif event == "BAG_UPDATE_DELAYED" and ns.ahOpen then
-    ns.CaptureDeposits()
-  end
-end)

@@ -38,15 +38,16 @@ local function IsReturnedSubject(subject)
   return false
 end
 
--- Invoices only carry the item name; find the tracked item with that name.
-local function TrackedItemIDByName(name)
-  local L = ns.Ledger()
-  for _, stock in ipairs({ L.crafted, L.bought, L.deposits or {} }) do
+-- Invoices only carry the item name: { [name] = itemID } of everything tracked (stock and listed deposits).
+local function TrackedNames()
+  local L, names = ns.Ledger(), {}
+  for _, stock in ipairs({ L.deposits or {}, L.bought, L.crafted }) do
     for id in pairs(stock) do
-      if C_Item.GetItemInfo(id) == name then return id end
+      local name = C_Item.GetItemInfo(id)
+      if name then names[name] = id end
     end
   end
-  return nil
+  return names
 end
 
 -- key -> { n = how many identical mails, entry = details }
@@ -79,8 +80,8 @@ end
 local snapshot   -- while the mailbox is open
 local visit      -- totals for this mailbox visit, printed on close
 
-local function Process(e)
-  local itemID = e.itemID or TrackedItemIDByName(e.itemName)
+local function Process(e, names)
+  local itemID = e.itemID or names()[e.itemName]
   if not itemID then return end
   if e.kind == "sale" then
     local net = e.bid - e.consignment
@@ -103,9 +104,11 @@ end
 function ns.OnInboxUpdate()
   if not snapshot then return end
   local new = Snapshot()
+  local cached
+  local function names() cached = cached or TrackedNames(); return cached end -- built only if something was taken
   for key, old in pairs(snapshot) do
     local remaining = new[key] and new[key].n or 0
-    for _ = 1, old.n - remaining do Process(old.entry) end
+    for _ = 1, old.n - remaining do Process(old.entry, names) end
   end
   snapshot = new
 end
@@ -132,17 +135,6 @@ function ns.OnMailClosed()
   end
 end
 
-local f = CreateFrame("Frame")
-ns.mailFrame = f
-f:RegisterEvent("MAIL_SHOW")
-f:RegisterEvent("MAIL_INBOX_UPDATE")
-f:RegisterEvent("MAIL_CLOSED")
-f:SetScript("OnEvent", function(_, event)
-  if event == "MAIL_SHOW" then
-    ns.OnMailShow()
-  elseif event == "MAIL_INBOX_UPDATE" then
-    ns.OnInboxUpdate()
-  elseif event == "MAIL_CLOSED" then
-    ns.OnMailClosed()
-  end
-end)
+ns.On("MAIL_SHOW", ns.OnMailShow)
+ns.On("MAIL_INBOX_UPDATE", ns.OnInboxUpdate)
+ns.On("MAIL_CLOSED", ns.OnMailClosed)

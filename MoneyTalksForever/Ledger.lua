@@ -102,7 +102,7 @@ local function Realize(kind, itemID, qty, earned, cost, estimated, channel, depo
   it.earned = it.earned + earned
   it.cost = it.cost + cost
   if channel == "ah" then it.ahQty = (it.ahQty or 0) + qty else it.vendorQty = (it.vendorQty or 0) + qty end
-  if ns.OnLedgerChanged then ns.OnLedgerChanged() end
+  ns.NotifyUI()
 end
 
 ---------------------------------------------------------------------------
@@ -113,7 +113,7 @@ function ns.RecordPurchase(itemID, qty, cost)
   if not itemID or not qty or qty <= 0 then return end
   StockAdd(ns.Ledger().bought, itemID, qty, math.max(0, cost or 0))
   ns.sessionStart = ns.sessionStart or GetTime()
-  if ns.OnLedgerChanged then ns.OnLedgerChanged() end
+  ns.NotifyUI()
 end
 
 -- One completed craft of a recorded recipe: use its reagents, stock the output at their cost.
@@ -149,7 +149,7 @@ function ns.RecordCraft(recipe)
   local outQty = math.max(1, recipe.qtyMin or 1)
   StockAdd(L.crafted, recipe.outputItemID, outQty, total, estimated)
   ns.sessionStart = ns.sessionStart or GetTime()
-  if ns.OnLedgerChanged then ns.OnLedgerChanged() end
+  ns.NotifyUI()
 end
 
 -- Sold qty of itemID to a vendor for `earned` copper. Returns the profit that was tracked (nil if untracked).
@@ -240,231 +240,16 @@ function ns.ResetLedger()
   MoneyTalksForeverDB.ledger[ns.CharKey()] = nil
   ns.session = NewBucket()
   ns.sessionStart = nil
-  if ns.OnLedgerChanged then ns.OnLedgerChanged() end
-end
-
----------------------------------------------------------------------------
--- Event glue
----------------------------------------------------------------------------
-local f = CreateFrame("Frame")
-ns.ledgerFrame = f
-
-local function BagCounts()
-  local counts = {}
-  if not C_Container then return counts end
-  for bag = 0, (NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4) do
-    for slot = 1, C_Container.GetContainerNumSlots(bag) or 0 do
-      local info = C_Container.GetContainerItemInfo(bag, slot)
-      if info and info.itemID then
-        counts[info.itemID] = (counts[info.itemID] or 0) + (info.stackCount or 1)
-      end
-    end
-  end
-  return counts
-end
-ns.BagCounts = BagCounts
-
--- AH: commodities (stackables). Start -> price update -> confirm -> succeeded/failed.
-local commodityStart, commodityConfirm
--- AH: single items bought at buyout, confirmed when the money leaves your bags.
-local pendingBuys = {}
-local lastMoney
-
-local function OnStartCommoditiesPurchase(itemID, qty)
-  commodityStart = { itemID = itemID, qty = qty }
-end
-
-local function OnConfirmCommoditiesPurchase(itemID, qty)
-  local total
-  if commodityStart and commodityStart.itemID == itemID and commodityStart.total then
-    total = commodityStart.total * qty / math.max(1, commodityStart.qty)
-  end
-  commodityConfirm = { itemID = itemID, qty = qty, total = total }
-end
-
-local function OnPlaceBid(auctionID, amount)
-  local info = C_AuctionHouse.GetAuctionInfoByID and C_AuctionHouse.GetAuctionInfoByID(auctionID)
-  if not info or not info.itemKey or not info.buyoutAmount or amount < info.buyoutAmount then return end
-  table.insert(pendingBuys, { itemID = info.itemKey.itemID, qty = info.quantity or 1, cost = amount, t = GetTime() })
-end
-
--- Listings of tracked items waiting for their deposit to be paid.
-local pendingPosts = {}
-
-local function OnPost(location, _, qty)
-  if not location or not C_Item.GetItemID then return end
-  local ok, itemID = pcall(C_Item.GetItemID, location)
-  if ok and itemID and ns.IsTracked(itemID) then
-    table.insert(pendingPosts, { itemID = itemID, qty = qty or 1, t = GetTime() })
-  end
-end
-
--- Hooks only observe calls (no taint): they run after the original function.
-function ns.InstallLedgerHooks()
-  local AH = C_AuctionHouse
-  lastMoney = GetMoney()
-  if ns.ledgerHooksInstalled or not AH or not hooksecurefunc then return end
-  ns.ledgerHooksInstalled = true -- installing twice would record every purchase twice
-  if AH.StartCommoditiesPurchase then hooksecurefunc(AH, "StartCommoditiesPurchase", OnStartCommoditiesPurchase) end
-  if AH.ConfirmCommoditiesPurchase then hooksecurefunc(AH, "ConfirmCommoditiesPurchase", OnConfirmCommoditiesPurchase) end
-  if AH.PlaceBid then hooksecurefunc(AH, "PlaceBid", OnPlaceBid) end
-  if AH.PostItem then hooksecurefunc(AH, "PostItem", OnPost) end
-  if AH.PostCommodity then hooksecurefunc(AH, "PostCommodity", OnPost) end
-  lastMoney = GetMoney()
-end
-
-local function MatchPendingBuys()
-  local now = GetMoney()
-  local spent = (lastMoney or now) - now
-  lastMoney = now
-  for i = #pendingBuys, 1, -1 do
-    local p = pendingBuys[i]
-    if GetTime() - p.t > 15 then
-      table.remove(pendingBuys, i) -- never paid: outbid or no longer available
-    elseif spent >= p.cost then
-      spent = spent - p.cost
-      ns.RecordPurchase(p.itemID, p.qty, p.cost)
-      table.remove(pendingBuys, i)
-    end
-  end
-  -- Whatever was spent beyond purchases while a listing is pending is that listing's deposit.
-  while #pendingPosts > 0 do
-    local p = pendingPosts[1]
-    if GetTime() - p.t > 15 then
-      table.remove(pendingPosts, 1) -- never posted (e.g. needed confirmation and was cancelled)
-    elseif spent > 0 then
-      ns.RecordDeposit(p.itemID, p.qty, spent)
-      spent = 0
-      table.remove(pendingPosts, 1)
-    else
-      break
-    end
-  end
-end
-
--- Vendor: compare bag contents and gold while the merchant window is open.
--- Waits until both have changed, since bag and money updates can arrive in different frames.
-local merchant -- { counts, money, earned, profit, untracked } while a vendor window is open
-
-local function MerchantDiff()
-  if not merchant then return end
-  local counts, money = BagCounts(), GetMoney()
-  local dMoney = money - merchant.money
-  local decreased, increased = {}, {}
-  for id, n in pairs(merchant.counts) do
-    local now = counts[id] or 0
-    if now < n then decreased[id] = n - now end
-  end
-  for id, n in pairs(counts) do
-    local before = merchant.counts[id] or 0
-    if n > before then increased[id] = n - before end
-  end
-  local itemsChanged = next(decreased) ~= nil or next(increased) ~= nil
-  if not itemsChanged then
-    merchant.money = money -- e.g. repairs: no items involved
-    merchant.waitStart = nil
-    return
-  end
-  if dMoney == 0 then
-    -- Items changed but no money (yet). Usually the money update is a frame behind; if it doesn't come,
-    -- this wasn't a sale (crafting or looting with the vendor open), so accept the new bag contents.
-    if not merchant.waitStart then
-      merchant.waitStart = GetTime()
-      C_Timer.After(1.2, MerchantDiff)
-    elseif GetTime() - merchant.waitStart > 1 then
-      merchant.counts, merchant.waitStart = counts, nil
-    end
-    return
-  end
-  merchant.waitStart = nil
-
-  if dMoney > 0 then
-    for id, q in pairs(decreased) do
-      local _, _, _, _, _, _, _, _, _, _, sellPrice = C_Item.GetItemInfo(id)
-      if sellPrice and sellPrice > 0 then
-        local earned = sellPrice * q
-        local profit = ns.RecordVendorSale(id, q, earned)
-        if profit then
-          merchant.earned = merchant.earned + earned
-          merchant.profit = merchant.profit + profit
-        end
-      end
-    end
-  else
-    -- Bought from the vendor: split what was paid across the new items by quantity.
-    local totalQty = 0
-    for _, q in pairs(increased) do totalQty = totalQty + q end
-    for id, q in pairs(increased) do ns.RecordPurchase(id, q, -dMoney * q / totalQty) end
-  end
-  merchant.counts, merchant.money = counts, money
-end
-ns.MerchantDiff = MerchantDiff
-
-local merchantDiffPending = false
-local function RequestMerchantDiff()
-  if merchantDiffPending then return end
-  merchantDiffPending = true
-  C_Timer.After(0.3, function()
-    merchantDiffPending = false
-    MerchantDiff()
-  end)
-end
-
-function ns.OnMerchantShow()
-  merchant = { counts = BagCounts(), money = GetMoney(), earned = 0, profit = 0 }
-end
-
-function ns.OnMerchantClosed()
-  if not merchant then return end
-  MerchantDiff()
-  if merchant.earned > 0 and ns.Settings().chatAlert then
-    ns.Print(("vendor visit: sold %s of tracked items, |cff00ff00%s profit|r (session %s)"):format(
-      ns.Money(merchant.earned), ns.Money(merchant.profit), ns.Money(ns.BucketProfit(ns.session))))
-  end
-  merchant = nil
+  ns.NotifyUI()
 end
 
 function ns.BucketProfit(b)
   return (b.crafts.earned - b.crafts.cost) + (b.flips.earned - b.flips.cost)
 end
 
-f:RegisterEvent("PLAYER_LOGIN")
-f:RegisterEvent("COMMODITY_PRICE_UPDATED")
-f:RegisterEvent("COMMODITY_PURCHASE_SUCCEEDED")
-f:RegisterEvent("COMMODITY_PURCHASE_FAILED")
-f:RegisterEvent("PLAYER_MONEY")
-f:RegisterEvent("MERCHANT_SHOW")
-f:RegisterEvent("MERCHANT_CLOSED")
-f:RegisterEvent("BAG_UPDATE_DELAYED")
-f:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
-f:SetScript("OnEvent", function(_, event, ...)
-  if event == "PLAYER_LOGIN" then
-    ns.InstallLedgerHooks()
-  elseif event == "COMMODITY_PRICE_UPDATED" then
-    local _, totalPrice = ...
-    if commodityStart then commodityStart.total = totalPrice end
-  elseif event == "COMMODITY_PURCHASE_SUCCEEDED" then
-    local c = commodityConfirm
-    commodityConfirm = nil
-    if c then
-      local cost = c.total or ((ns.GetReagentUnitPrice(c.itemID) or 0) * c.qty)
-      ns.RecordPurchase(c.itemID, c.qty, cost)
-    end
-  elseif event == "COMMODITY_PURCHASE_FAILED" then
-    commodityConfirm = nil
-  elseif event == "PLAYER_MONEY" then
-    if #pendingBuys > 0 or #pendingPosts > 0 then MatchPendingBuys() else lastMoney = GetMoney() end
-    if merchant then RequestMerchantDiff() end
-  elseif event == "BAG_UPDATE_DELAYED" then
-    if merchant then RequestMerchantDiff() end
-  elseif event == "MERCHANT_SHOW" then
-    ns.OnMerchantShow()
-  elseif event == "MERCHANT_CLOSED" then
-    ns.OnMerchantClosed()
-  elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
-    local unit, _, spellID = ...
-    -- Profession recipe IDs are the spell IDs of the craft.
-    local recipe = unit == "player" and MoneyTalksForeverDB and ns.CharStore().recipes[spellID]
-    if recipe then ns.RecordCraft(recipe) end
-  end
+-- Crafting a recorded recipe. Profession recipe IDs are the spell IDs of the craft.
+ns.On("UNIT_SPELLCAST_SUCCEEDED", function(unit, _, spellID)
+  if unit ~= "player" or not MoneyTalksForeverDB then return end
+  local recipe = ns.CharStore().recipes[spellID]
+  if recipe then ns.RecordCraft(recipe) end
 end)

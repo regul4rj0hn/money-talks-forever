@@ -1,5 +1,11 @@
--- Money Talks Forever: prices (Auctionator), bind checks and the "Shuffle me!" evaluation.
+-- Money Talks Forever: the "Shuffle me!" evaluation of recorded recipes.
+--   cost of a craft     = cheapest way to get each required reagent: buy it, or craft it from your own recipes
+--   plan                = what to buy and craft, in order, for one craft
+--   vendor/AH value     = what the crafted item sells for; "Shuffle me!" when vendor value - cost >= min profit
 local _, ns = ...
+
+ns.results = {}          -- evaluated rows, sorted (see EvaluateRecipe)
+ns.flaggedByItem = {}    -- [outputItemID] = best "Shuffle me!" row for that item
 
 ns.STATUS = {
   SHUFFLE = 1,   -- reagent cost < vendor value  -> "Shuffle me!"
@@ -16,49 +22,19 @@ local TRADEABLE_BIND = {
   [(Enum.ItemBind and Enum.ItemBind.OnUse) or 3] = true,
 }
 
-function ns.AuctionatorAPI()
-  return Auctionator and Auctionator.API and Auctionator.API.v1
-end
-
-function ns.Money(copper)
-  if copper == nil then return "|cff808080--|r" end
-  local neg = copper < 0
-  local s = GetMoneyString(math.abs(math.floor(copper + 0.5)), true)
-  return neg and ("-" .. s) or s
-end
-
 ns.AH_CUT = 0.05 -- the auction house keeps 5% of the sale price
 
-local function SafeCall(fn, ...)
-  if not fn then return nil end
-  local ok, v = pcall(fn, ...)
-  if ok and type(v) == "number" and v > 0 then return v end
-  return nil
-end
-
--- Cheapest way to acquire one unit of a reagent: AH buyout, or NPC vendor price if Auctionator knows it.
+-- Cheapest way to buy one unit of a reagent: AH buyout, or NPC vendor price if Auctionator knows it.
+-- Returns price, "AH" | "vendor"; nil if neither is known.
 function ns.GetReagentUnitPrice(itemID)
-  local api = ns.AuctionatorAPI()
-  if not api then return nil end
-  local ah = SafeCall(api.GetAuctionPriceByItemID, ns.CALLER_ID, itemID)
-  local vendor = ns.Settings().useVendorReagentPrice and SafeCall(api.GetVendorPriceByItemID, ns.CALLER_ID, itemID) or nil
-  if ah and vendor then
-    if vendor <= ah then return vendor, "vendor" end
-    return ah, "AH"
-  end
+  local ah = ns.AuctionPrice(itemID)
+  local vendor = ns.Settings().useVendorReagentPrice and ns.VendorBuyPrice(itemID) or nil
+  if vendor and (not ah or vendor <= ah) then return vendor, "vendor" end
   if ah then return ah, "AH" end
-  if vendor then return vendor, "vendor" end
   return nil
 end
 
-local function ItemName(itemID)
-  local name = C_Item.GetItemInfo(itemID)
-  if not name then
-    C_Item.RequestLoadItemDataByID(itemID)
-    ns.waitingForItems = true
-  end
-  return name or ("item:" .. itemID)
-end
+local ItemName = ns.ItemName
 
 -- Pricing context for one evaluation pass:
 --   byOutput[itemID] = { recipe, ... }  recipes you know that produce itemID
@@ -241,32 +217,30 @@ function ns.EvaluateRecipe(recipeID, r, ctx)
     missing = {},
   }
 
-  local itemName, itemLink, _, _, _, _, _, _, _, icon, sellPrice, _, _, bindType = C_Item.GetItemInfo(r.outputItemID)
-  if not itemName then
-    C_Item.RequestLoadItemDataByID(r.outputItemID)
-    ns.waitingForItems = true
+  local info = ns.ItemInfo(r.outputItemID)
+  if not info then
+    ItemName(r.outputItemID) -- requests the item data
     res.status = S.LOADING
     res.icon = C_Item.GetItemIconByID and C_Item.GetItemIconByID(r.outputItemID) or nil
     return res
   end
 
-  if not ns.Settings().includeSoulbound and not TRADEABLE_BIND[bindType or 0] then
+  if not ns.Settings().includeSoulbound and not TRADEABLE_BIND[info.bindType or 0] then
     return nil
   end
 
-  res.itemLink, res.icon, res.bindType = itemLink, icon, bindType
-  res.vendorValue = (sellPrice or 0) * res.qty
+  res.itemLink, res.icon, res.bindType = info.link, info.icon, info.bindType
+  res.vendorValue = info.sellPrice * res.qty
 
   -- What the output would fetch on the AH instead (Auctionator's last-scan price; nil if never seen listed).
-  local api = ns.AuctionatorAPI()
-  local ahUnit = api and SafeCall(api.GetAuctionPriceByItemID, ns.CALLER_ID, r.outputItemID)
+  local ahUnit = ns.AuctionPrice(r.outputItemID)
   if ahUnit then
     res.auctionValue = ahUnit * res.qty
     res.auctionNet = res.auctionValue * (1 - ns.AH_CUT)
   end
   -- AH-or-vendor verdict does not depend on reagent cost, so it is known even for unpriced recipes.
   local depositUnit
-  depositUnit, res.depositEstimated = ns.GetDeposit(r.outputItemID, sellPrice)
+  depositUnit, res.depositEstimated = ns.GetDeposit(r.outputItemID, info.sellPrice)
   res.deposit = depositUnit * res.qty
   res.saleVerdict, res.breakEvenSell = ns.SaleVerdict(res)
 
@@ -332,34 +306,23 @@ function ns.Evaluate()
   if ns.announceNextEval then
     ns.announceNextEval = false
     if ns.Settings().chatAlert then
-      ns.Print(("Auctionator prices updated - %d item(s) flagged |cff00ff00Shuffle me!|r (/mtf)"):format(shuffleCount))
+      ns.Print(("Auctionator prices updated - %d item(s) flagged %s (/mtf)"):format(
+        shuffleCount, ns.Colorize("Shuffle me!", ns.COLOR.GREEN)))
     end
   end
-  if ns.RefreshUI then ns.RefreshUI() end
+  ns.NotifyUI()
 end
 
----------------------------------------------------------------------------
--- Tooltip: add "Shuffle me!" to any item tooltip for a flagged crafted item.
----------------------------------------------------------------------------
-local function AddTooltipLine(tooltip, itemID)
-  local res = itemID and ns.flaggedByItem[itemID]
-  if not res then return end
-  tooltip:AddLine(" ")
-  tooltip:AddDoubleLine("|cff00ff00Money Talks: Shuffle me!|r", "+" .. ns.Money(res.profit) .. " / craft")
-  tooltip:AddDoubleLine("  reagents (AH)", ns.Money(res.cost), 0.8, 0.8, 0.8, 1, 1, 1)
-  tooltip:AddDoubleLine("  vendor value x" .. res.qty, ns.Money(res.vendorValue), 0.8, 0.8, 0.8, 1, 1, 1)
+-- Re-evaluates once after a burst of triggers (item data arriving, scans, settings changes).
+function ns.RequestEvaluate(delay)
+  ns.Debounce("evaluate", delay or 0.5, ns.Evaluate)
 end
 
-function ns.InstallTooltipHook()
-  if TooltipDataProcessor and Enum.TooltipDataType then
-    TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, function(tooltip, data)
-      if data and data.id then AddTooltipLine(tooltip, data.id) end
-    end)
-  elseif GameTooltip:HasScript("OnTooltipSetItem") then
-    GameTooltip:HookScript("OnTooltipSetItem", function(tooltip)
-      local _, link = tooltip:GetItem()
-      local id = link and C_Item.GetItemInfoInstant(link)
-      AddTooltipLine(tooltip, id)
-    end)
-  end
-end
+ns.On("PLAYER_LOGIN", function() ns.RequestEvaluate(3) end)
+ns.On("GET_ITEM_INFO_RECEIVED", function()
+  if ns.waitingForItems then ns.RequestEvaluate(1) end
+end)
+ns.On("MTF_PRICES_UPDATED", function()
+  ns.announceNextEval = true
+  ns.RequestEvaluate(1)
+end)
