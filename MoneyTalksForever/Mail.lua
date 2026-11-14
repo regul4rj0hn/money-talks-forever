@@ -1,4 +1,4 @@
--- CraftShuffler: AH sales income and lost deposits, from the mailbox.
+-- Money Talks Forever: AH sales income and lost deposits, from the mailbox.
 --
 -- While the mailbox is open we keep a snapshot of AH mails and compare it after every inbox update:
 --   * an "Auction successful" mail (seller invoice) whose gold was collected -> AH sale

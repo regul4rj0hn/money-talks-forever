@@ -1,0 +1,16 @@
+## Interface: 16001
+## Title: Money Talks Forever
+## Notes: Make gold with crafting shuffles, vendor flips and smart AH selling, using Auctionator prices. Tracks your real profit.
+## IconTexture: Interface\Icons\INV_Misc_Coin_02
+## Version: 0.4.0
+## OptionalDeps: Auctionator, CraftShuffler
+## SavedVariables: MoneyTalksForeverDB
+
+Core.lua
+Pricing.lua
+AuctionHouse.lua
+Flips.lua
+Ledger.lua
+Mail.lua
+Scanner.lua
+UI.lua

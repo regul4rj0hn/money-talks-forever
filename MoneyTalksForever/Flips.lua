@@ -1,16 +1,16 @@
--- CraftShuffler: "vendor flips" - AH listings priced below what a vendor pays for the item.
+-- Money Talks Forever: "vendor flips" - AH listings priced below what a vendor pays for the item.
 -- Source: the game's replicate data (every listing on the AH) that Auctionator's full scan downloads.
 local _, ns = ...
 
 ns.flips = { items = {}, scannedAt = nil, listings = 0 }
-ns.FLIPS_LIST_NAME = "CraftShuffler Flips"
+ns.FLIPS_LIST_NAME = "Money Talks Forever Flips"
 
 local BATCH = 2000 -- listings per frame, keeps the game responsive on big AHs
 
 local function RealmKey() return GetRealmName() or "?" end
 
 function ns.LoadSavedFlips()
-  local saved = CraftShufflerDB.flips[RealmKey()]
+  local saved = MoneyTalksForeverDB.flips[RealmKey()]
   if saved then ns.flips = saved end
 end
 
@@ -58,7 +58,7 @@ function ns.ScanReplicateForFlips(force, attempt)
       return a.itemID < b.itemID
     end)
     ns.flips = { items = items, scannedAt = time(), listings = n, skipped = skipped }
-    CraftShufflerDB.flips[RealmKey()] = ns.flips
+    MoneyTalksForeverDB.flips[RealmKey()] = ns.flips
     ns.flipScanRunning = false
 
     if skipped > 0 and attempt < MAX_ATTEMPTS then
@@ -78,7 +78,7 @@ function ns.ScanReplicateForFlips(force, attempt)
 
     local total = 0
     for _, e in ipairs(items) do total = total + e.profit end
-    ns.Print(("vendor flips: %d item(s) on the AH below vendor price, %s total profit (/shuffle flips)%s")
+    ns.Print(("vendor flips: %d item(s) on the AH below vendor price, %s total profit (/mtf flips)%s")
       :format(#items, ns.Money(total), skipped > 0 and (" - %d listing(s) skipped, item data not loaded"):format(skipped) or ""))
     if ns.RefreshUI then ns.RefreshUI() end
   end

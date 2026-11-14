@@ -1,4 +1,4 @@
--- CraftShuffler: AH-vs-vendor verdict (deposits) and Auctionator shopping list with max prices.
+-- Money Talks Forever: AH-vs-vendor verdict (deposits) and Auctionator shopping list with max prices.
 local _, ns = ...
 
 -- Durations as used by C_AuctionHouse: 1 = 12h, 2 = 24h, 3 = 48h.
@@ -15,7 +15,7 @@ local ESTIMATE_RATE_PER_12H = 0.15
 -- Per-unit deposit for listing itemID at the configured duration. Returns deposit, isEstimate.
 function ns.GetDeposit(itemID, unitSellPrice)
   local duration = ns.Settings().ahDuration
-  local rec = CraftShufflerDB.deposits[itemID]
+  local rec = MoneyTalksForeverDB.deposits[itemID]
   if rec and rec[duration] then return rec[duration], false end
   local hours = ns.DURATION_HOURS[duration] or 12
   return (unitSellPrice or 0) * ESTIMATE_RATE_PER_12H * (hours / 12), true
@@ -73,10 +73,10 @@ function ns.CaptureDeposits()
       perUnit = d and d / QTY
     end
     if perUnit then
-      local rec = CraftShufflerDB.deposits[itemID] or {}
+      local rec = MoneyTalksForeverDB.deposits[itemID] or {}
       if rec[duration] ~= perUnit then
         rec[duration] = perUnit
-        CraftShufflerDB.deposits[itemID] = rec
+        MoneyTalksForeverDB.deposits[itemID] = rec
         changed = true
       end
     end
@@ -102,7 +102,7 @@ end
 ---------------------------------------------------------------------------
 -- Shopping list
 ---------------------------------------------------------------------------
-ns.SHOPPING_LIST_NAME = "CraftShuffler"
+ns.SHOPPING_LIST_NAME = "Money Talks Forever"
 
 -- Highest price per reagent you can pay and still make the minimum profit, over all "Shuffle me!" recipes.
 -- Returns sorted list of { itemID, name, maxPrice, unit, recipes = n } plus vendor-bought reagents.

@@ -25,7 +25,7 @@ jobs:
 
       - name: Check tag matches TOC version
         run: |
-          toc=$(sed -n 's/^## Version: *//p' CraftShuffler/CraftShuffler.toc | tr -d '\r')
+          toc=$(sed -n 's/^## Version: *//p' MoneyTalksForever/MoneyTalksForever.toc | tr -d '\r')
           if [ "v$toc" != "$TAG" ]; then
             echo "Tag $TAG does not match TOC version $toc" >&2
             exit 1
@@ -40,8 +40,8 @@ jobs:
 
       - name: Build zip
         run: |
-          # The zip contains the CraftShuffler/ folder, ready to extract into Interface/AddOns/.
-          zip -r "CraftShuffler-$TAG.zip" CraftShuffler
+          # The zip contains the MoneyTalksForever/ folder, ready to extract into Interface/AddOns/.
+          zip -r "MoneyTalksForever-$TAG.zip" MoneyTalksForever
 
       - name: Extract release notes from CHANGELOG
         run: |
@@ -60,7 +60,7 @@ jobs:
           # Manual runs backfill older tags, so they must not take the "Latest" label from a newer release.
           latest=true
           [ "${{ github.event_name }}" = "workflow_dispatch" ] && latest=false
-          gh release create "$TAG" "CraftShuffler-$TAG.zip" \
-            --title "CraftShuffler $TAG" \
+          gh release create "$TAG" "MoneyTalksForever-$TAG.zip" \
+            --title "Money Talks Forever $TAG" \
             --notes-file notes.md \
             --latest=$latest

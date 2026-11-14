@@ -7,17 +7,17 @@
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 LUAC=${1:-luac}
-ADDON_DIR=${ADDON_DIR:-CraftShuffler}
+ADDON_DIR=${ADDON_DIR:-MoneyTalksForever}
 
 # WoW API, FrameXML and Lua standard library names the addon is expected to use.
 ALLOWED="
-Auctionator AUCTION_EXPIRED_MAIL_SUBJECT AUCTION_REMOVED_MAIL_SUBJECT BreakUpLargeNumbers
+Auctionator AUCTION_EXPIRED_MAIL_SUBJECT CraftShufflerDB DisableAddOn AUCTION_REMOVED_MAIL_SUBJECT BreakUpLargeNumbers
 C_AddOns C_AuctionHouse C_Container C_CurrencyInfo C_Item C_Timer C_TradeSkillUI ChatEdit_InsertLink
-CraftShufflerDB CreateDataProvider CreateFrame CreateScrollBoxListLinearView Enum GameTooltip GameTooltip_Hide
+MoneyTalksForeverDB CreateDataProvider CreateFrame CreateScrollBoxListLinearView Enum GameTooltip GameTooltip_Hide
 GetAddOnMetadata GetInboxHeaderInfo GetInboxInvoiceInfo GetInboxItem GetInboxNumItems GetMoney GetMoneyString
 GetRealmName GetTime IsModifiedClick ItemLocation NO NUM_BAG_SLOTS NUM_TOTAL_EQUIPPED_BAG_SLOTS
 ScrollBoxConstants ScrollUtil SlashCmdList StaticPopupDialogs StaticPopup_Show TooltipDataProcessor UIParent
-UISpecialFrames UnitName YES SLASH_CRAFTSHUFFLER1 SLASH_CRAFTSHUFFLER2
+UISpecialFrames UnitName YES SLASH_MONEYTALKSFOREVER1 SLASH_MONEYTALKSFOREVER2
 date hooksecurefunc ipairs math next pairs pcall print select string table time tinsert tonumber tostring type unpack
 "
 

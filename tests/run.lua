@@ -1,6 +1,6 @@
--- Offline tests for CraftShuffler's scanning/pricing logic, using a mocked WoW API.
+-- Offline tests for Money Talks Forever's scanning/pricing logic, using a mocked WoW API.
 -- Run from the repo root:  lua tests/run.lua
-local ADDON_DIR = "CraftShuffler"
+local ADDON_DIR = "MoneyTalksForever"
 
 ---------------------------------------------------------------------------
 -- WoW API mocks
@@ -133,13 +133,13 @@ C_TradeSkillUI = {
 
 local ns = {}
 for _, f in ipairs({ "Core.lua", "Pricing.lua", "AuctionHouse.lua", "Flips.lua", "Ledger.lua", "Mail.lua", "Scanner.lua" }) do
-  assert(loadfile(ADDON_DIR .. "/" .. f))("CraftShuffler", ns)
+  assert(loadfile(ADDON_DIR .. "/" .. f))("MoneyTalksForever", ns)
 end
 print = function() end -- silence addon chat output
 
 local function Setup(scenario)
   items, ah, vendor, recipes = scenario.items, scenario.ah, scenario.vendor or {}, scenario.recipes
-  CraftShufflerDB = { chars = {}, deposits = {}, flips = {}, ledger = {}, settings = {
+  MoneyTalksForeverDB = { chars = {}, deposits = {}, flips = {}, ledger = {}, settings = {
     useVendorReagentPrice = true, craftReagents = true, includeSoulbound = false, minProfit = 1, ahDuration = 1,
     flipMinProfit = 1 } }
   ns.ScanOpenProfession()
@@ -179,11 +179,11 @@ tests["basic shuffle / no profit / missing / soulbound excluded"] = function()
   assert(by.Bolt.status == ns.STATUS.MISSING)
   assert(ns.flaggedByItem[101])
 
-  CraftShufflerDB.settings.useVendorReagentPrice = false
+  MoneyTalksForeverDB.settings.useVendorReagentPrice = false
   assert(ByName().Shirt.status == ns.STATUS.MISSING, "thread has no price without vendor prices")
 
-  CraftShufflerDB.settings.useVendorReagentPrice = true
-  CraftShufflerDB.settings.includeSoulbound = true
+  MoneyTalksForeverDB.settings.useVendorReagentPrice = true
+  MoneyTalksForeverDB.settings.includeSoulbound = true
   assert(ByName().Robe and ns.flaggedByItem[102])
 end
 
@@ -214,10 +214,10 @@ tests["craftable reagents use the cheaper of buy vs craft"] = function()
   by = ByName()
   assert(by.Shirt.cost == 120 and by.Shirt.breakdown[1].buyUnit == nil, "priceable via crafting with no AH listing")
 
-  CraftShufflerDB.settings.craftReagents = false
+  MoneyTalksForeverDB.settings.craftReagents = false
   assert(ByName().Shirt.status == ns.STATUS.MISSING)
 
-  CraftShufflerDB.settings.craftReagents = true
+  MoneyTalksForeverDB.settings.craftReagents = true
   ah[2996] = 30
   by = ByName()
   assert(by.Shirt.cost == 90 and by.Shirt.breakdown[1].source == "AH")
@@ -263,11 +263,11 @@ tests["AH vs vendor verdict with estimated and recorded deposits"] = function()
   assert(by.Pants.saleVerdict == "vendor", "AH net 95 < vendor 500")
   assert(by.Bolt.saleVerdict == "ah", "verdict is known even though bolt is unprofitable to craft")
 
-  CraftShufflerDB.deposits[2568] = { [1] = 10 }
+  MoneyTalksForeverDB.deposits[2568] = { [1] = 10 }
   shirt = ByName().Shirt
   assert(not shirt.depositEstimated and math.abs(shirt.breakEvenSell - 10 / 190) < 1e-9)
 
-  CraftShufflerDB.settings.ahDuration = 3 -- 48h: no recorded value, estimate x4
+  MoneyTalksForeverDB.settings.ahDuration = 3 -- 48h: no recorded value, estimate x4
   assert(ByName().Shirt.deposit == 120)
 end
 
@@ -308,9 +308,9 @@ tests["vendor flips from full scan listings"] = function()
   local bolt = f.items[2]
   assert(bolt.listings == 2 and bolt.qty == 6 and bolt.cost == 34 and bolt.vendor == 60 and bolt.profit == 26)
   assert(bolt.maxUnit == 9 and bolt.vendorUnit == 10)
-  assert(f.skipped == 1 and CraftShufflerDB.flips.Realm == f)
+  assert(f.skipped == 1 and MoneyTalksForeverDB.flips.Realm == f)
 
-  CraftShufflerDB.settings.flipMinProfit = 30
+  MoneyTalksForeverDB.settings.flipMinProfit = 30
   ns.ScanReplicateForFlips(true); flush()
   assert(#ns.flips.items == 1 and ns.flips.items[1].itemID == 2568)
 
@@ -568,6 +568,40 @@ tests["ledger: AH sales from mail and lost deposits"] = function()
   FireMail("MAIL_CLOSED")
   assert(L.items[2996].ahQty == 1 and L.items[2996].earned == 14 and L.items[2996].cost == 10 + 3)
   inbox = {}
+end
+
+tests["migrates CraftShuffler data once, only when there is none of our own"] = function()
+  local function Load()
+    ns.eventFrame.scripts.OnEvent(ns.eventFrame, "ADDON_LOADED", "MoneyTalksForever")
+  end
+  local savedDB = MoneyTalksForeverDB
+
+  -- Old data, no new data: imported
+  CraftShufflerDB = { chars = { ["Tester-Realm"] = { recipes = { [1] = { name = "Bolt" } } } }, settings = { minProfit = 50 } }
+  MoneyTalksForeverDB = nil
+  Load()
+  assert(MoneyTalksForeverDB.chars["Tester-Realm"].recipes[1].name == "Bolt" and ns.migrated)
+  assert(MoneyTalksForeverDB.settings.minProfit == 50, "settings kept")
+  assert(MoneyTalksForeverDB.settings.flipMinProfit == 1, "new defaults filled in")
+  assert(MoneyTalksForeverDB.migratedFrom == "CraftShuffler")
+
+  -- Already migrated: not imported again
+  local db = MoneyTalksForeverDB
+  CraftShufflerDB = { chars = { ["Other-Realm"] = { recipes = {} } } }
+  Load()
+  assert(MoneyTalksForeverDB == db and not ns.migrated)
+
+  -- New addon already has its own data: kept
+  MoneyTalksForeverDB = { chars = { ["Mine-Realm"] = { recipes = {} } } }
+  Load()
+  assert(MoneyTalksForeverDB.chars["Mine-Realm"] and not ns.migrated)
+
+  -- No old addon: fresh start
+  CraftShufflerDB, MoneyTalksForeverDB = nil, nil
+  Load()
+  assert(type(MoneyTalksForeverDB.chars) == "table" and not ns.migrated)
+
+  CraftShufflerDB, MoneyTalksForeverDB = nil, savedDB
 end
 
 local names = {}

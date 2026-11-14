@@ -1,7 +1,7 @@
--- CraftShuffler: core (saved variables, events, slash commands)
+-- Money Talks Forever: core (saved variables, events, slash commands)
 local ADDON_NAME, ns = ...
 
-ns.CALLER_ID = "CraftShuffler"
+ns.CALLER_ID = "MoneyTalksForever"
 local GetMeta = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
 ns.VERSION = (GetMeta and GetMeta(ADDON_NAME, "Version")) or "?"
 ns.results = {}          -- evaluated recipe rows (see Pricing.lua)
@@ -19,7 +19,7 @@ local DEFAULTS = {
 }
 
 local function Print(...)
-  print("|cff33ff99CraftShuffler|r:", ...)
+  print("|cff33ff99Money Talks|r:", ...)
 end
 ns.Print = Print
 
@@ -27,15 +27,15 @@ function ns.CharKey()
   return (UnitName("player") or "?") .. "-" .. (GetRealmName() or "?")
 end
 
--- Per-character storage of known recipes: CraftShufflerDB.chars[charKey].recipes[recipeID]
+-- Per-character storage of known recipes: MoneyTalksForeverDB.chars[charKey].recipes[recipeID]
 function ns.CharStore()
   local key = ns.CharKey()
-  CraftShufflerDB.chars[key] = CraftShufflerDB.chars[key] or { recipes = {} }
-  return CraftShufflerDB.chars[key]
+  MoneyTalksForeverDB.chars[key] = MoneyTalksForeverDB.chars[key] or { recipes = {} }
+  return MoneyTalksForeverDB.chars[key]
 end
 
 function ns.Settings()
-  return CraftShufflerDB.settings
+  return MoneyTalksForeverDB.settings
 end
 
 -- Debounced re-evaluation so bursts of events (item cache, scans) only trigger one pass.
@@ -84,18 +84,42 @@ local function RegisterAuctionatorCallback()
   end
 end
 
+-- One-time import from the addon's previous name, CraftShuffler. Its saved variables only exist if that addon is
+-- still installed and enabled (OptionalDeps makes it load first). Only imports when we have no data of our own.
+local OLD_ADDON = "CraftShuffler"
+local function MigrateFromOldName()
+  local old = CraftShufflerDB
+  if type(old) ~= "table" then return false end
+  local db = MoneyTalksForeverDB
+  if db and (db.migratedFrom or (db.chars and next(db.chars))) then return false end
+  MoneyTalksForeverDB = old
+  old.migratedFrom = OLD_ADDON
+  return true
+end
+
+local function DisableOldAddon()
+  local disable = (C_AddOns and C_AddOns.DisableAddOn) or DisableAddOn
+  if disable then pcall(disable, OLD_ADDON) end
+end
+
 frame:SetScript("OnEvent", function(_, event, arg1)
   if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
-    CraftShufflerDB = CraftShufflerDB or {}
-    CraftShufflerDB.chars = CraftShufflerDB.chars or {}
-    CraftShufflerDB.settings = CraftShufflerDB.settings or {}
-    CraftShufflerDB.deposits = CraftShufflerDB.deposits or {}   -- [itemID][duration] = per-unit deposit
-    CraftShufflerDB.flips = CraftShufflerDB.flips or {}         -- [realm] = last vendor flips scan
-    CraftShufflerDB.ledger = CraftShufflerDB.ledger or {}       -- [charKey] = profit-so-far ledger
+    ns.migrated = MigrateFromOldName()
+    MoneyTalksForeverDB = MoneyTalksForeverDB or {}
+    MoneyTalksForeverDB.chars = MoneyTalksForeverDB.chars or {}
+    MoneyTalksForeverDB.settings = MoneyTalksForeverDB.settings or {}
+    MoneyTalksForeverDB.deposits = MoneyTalksForeverDB.deposits or {}   -- [itemID][duration] = per-unit deposit
+    MoneyTalksForeverDB.flips = MoneyTalksForeverDB.flips or {}         -- [realm] = last vendor flips scan
+    MoneyTalksForeverDB.ledger = MoneyTalksForeverDB.ledger or {}       -- [charKey] = profit-so-far ledger
     for k, v in pairs(DEFAULTS) do
-      if CraftShufflerDB.settings[k] == nil then CraftShufflerDB.settings[k] = v end
+      if MoneyTalksForeverDB.settings[k] == nil then MoneyTalksForeverDB.settings[k] = v end
     end
   elseif event == "PLAYER_LOGIN" then
+    if ns.migrated then
+      DisableOldAddon()
+      Print("imported your CraftShuffler data (recipes, deposits, flips, profit history). CraftShuffler is now "
+        .. "disabled: /reload, then you can delete its folder from Interface/AddOns.")
+    end
     RegisterAuctionatorCallback()
     ns.InstallTooltipHook()
     ns.LoadSavedFlips()
@@ -150,27 +174,27 @@ end
 local function Help()
   local s = ns.Settings()
   Print("commands:")
-  print("  /shuffle - toggle the window")
-  print("  /shuffle list - print all 'Shuffle me!' items to chat")
-  print("  /shuffle vendor - toggle using NPC vendor reagent prices (" .. OnOff(s.useVendorReagentPrice) .. ")")
-  print("  /shuffle craft - toggle pricing reagents at their own craft cost when cheaper (" .. OnOff(s.craftReagents) .. ")")
-  print("  /shuffle soulbound - toggle including soulbound crafts (" .. OnOff(s.includeSoulbound) .. ")")
-  print("  /shuffle minprofit <gold> - minimum profit per craft, e.g. 0.5 = 50s (now " .. ns.Money(s.minProfit) .. ")")
-  print("  /shuffle shop - create an Auctionator shopping list of reagents with max prices")
-  print("  /shuffle flips - show AH listings cheaper than their vendor price (needs a full Auctionator scan)")
-  print("  /shuffle flipmin <gold> - minimum profit per flip listing (now " .. ns.Money(s.flipMinProfit) .. ")")
-  print("  /shuffle profit - show what you've made (crafts and flips sold to vendors)")
-  print("  /shuffle profit reset - clear this character's profit history")
-  print("  /shuffle fullscan - full AH scan for vendor flips (at the AH, once per 15 min)")
-  print("  /shuffle debug - print diagnostic info")
-  print("  /shuffle duration 12|24|48 - auction duration for deposits (now " .. ns.DURATION_HOURS[s.ahDuration] .. "h)")
-  print("  /shuffle reset - forget this character's stored recipes")
+  print("  /mtf - toggle the window")
+  print("  /mtf list - print all 'Shuffle me!' items to chat")
+  print("  /mtf vendor - toggle using NPC vendor reagent prices (" .. OnOff(s.useVendorReagentPrice) .. ")")
+  print("  /mtf craft - toggle pricing reagents at their own craft cost when cheaper (" .. OnOff(s.craftReagents) .. ")")
+  print("  /mtf soulbound - toggle including soulbound crafts (" .. OnOff(s.includeSoulbound) .. ")")
+  print("  /mtf minprofit <gold> - minimum profit per craft, e.g. 0.5 = 50s (now " .. ns.Money(s.minProfit) .. ")")
+  print("  /mtf shop - create an Auctionator shopping list of reagents with max prices")
+  print("  /mtf flips - show AH listings cheaper than their vendor price (needs a full Auctionator scan)")
+  print("  /mtf flipmin <gold> - minimum profit per flip listing (now " .. ns.Money(s.flipMinProfit) .. ")")
+  print("  /mtf profit - show what you've made (crafts and flips sold to vendors)")
+  print("  /mtf profit reset - clear this character's profit history")
+  print("  /mtf fullscan - full AH scan for vendor flips (at the AH, once per 15 min)")
+  print("  /mtf debug - print diagnostic info")
+  print("  /mtf duration 12|24|48 - auction duration for deposits (now " .. ns.DURATION_HOURS[s.ahDuration] .. "h)")
+  print("  /mtf reset - forget this character's stored recipes")
   print("Open each profession window once so its recipes are recorded.")
 end
 
-SLASH_CRAFTSHUFFLER1 = "/shuffle"
-SLASH_CRAFTSHUFFLER2 = "/craftshuffler"
-SlashCmdList.CRAFTSHUFFLER = function(msg)
+SLASH_MONEYTALKSFOREVER1 = "/mtf"
+SLASH_MONEYTALKSFOREVER2 = "/shuffle" -- the old command keeps working
+SlashCmdList.MONEYTALKSFOREVER = function(msg)
   local cmd, rest = (msg or ""):lower():match("^%s*(%S*)%s*(.-)%s*$")
   local s = ns.Settings()
   if cmd == "" then
@@ -204,7 +228,7 @@ SlashCmdList.CRAFTSHUFFLER = function(msg)
   elseif cmd == "minprofit" then
     local gold = tonumber(rest)
     if not gold or gold < 0 then
-      Print("usage: /shuffle minprofit <gold>  (e.g. 0.05 = 5 silver)")
+      Print("usage: /mtf minprofit <gold>  (e.g. 0.05 = 5 silver)")
     else
       s.minProfit = math.max(1, math.floor(gold * 10000 + 0.5))
       Print("minimum profit set to " .. ns.Money(s.minProfit))
@@ -219,7 +243,7 @@ SlashCmdList.CRAFTSHUFFLER = function(msg)
     end
   elseif cmd == "profit" then
     if rest == "reset" then
-      StaticPopup_Show("CRAFTSHUFFLER_RESET_LEDGER")
+      StaticPopup_Show("MONEYTALKSFOREVER_RESET_LEDGER")
     else
       ns.ShowTab("profit")
       local b, L = ns.session, ns.Ledger()
@@ -233,7 +257,7 @@ SlashCmdList.CRAFTSHUFFLER = function(msg)
   elseif cmd == "flipmin" then
     local gold = tonumber(rest)
     if not gold or gold < 0 then
-      Print("usage: /shuffle flipmin <gold>  (e.g. 0.01 = 1 silver)")
+      Print("usage: /mtf flipmin <gold>  (e.g. 0.01 = 1 silver)")
     else
       s.flipMinProfit = math.max(1, math.floor(gold * 10000 + 0.5))
       Print("minimum flip profit set to " .. ns.Money(s.flipMinProfit) .. " (applies from the next scan)")
@@ -241,7 +265,7 @@ SlashCmdList.CRAFTSHUFFLER = function(msg)
   elseif cmd == "duration" then
     local idx = ({ ["12"] = 1, ["24"] = 2, ["48"] = 3 })[rest]
     if not idx then
-      Print("usage: /shuffle duration 12|24|48")
+      Print("usage: /mtf duration 12|24|48")
     else
       s.ahDuration = idx
       Print("auction duration set to " .. rest .. "h")

@@ -1,4 +1,4 @@
--- CraftShuffler: prices (Auctionator), bind checks and the "Shuffle me!" evaluation.
+-- Money Talks Forever: prices (Auctionator), bind checks and the "Shuffle me!" evaluation.
 local _, ns = ...
 
 ns.STATUS = {
@@ -311,7 +311,7 @@ local function SortResults(a, b)
 end
 
 function ns.Evaluate()
-  if not CraftShufflerDB then return end
+  if not MoneyTalksForeverDB then return end
   ns.waitingForItems = false
   local results, flagged, shuffleCount = {}, {}, 0
   local ctx = NewContext()
@@ -332,7 +332,7 @@ function ns.Evaluate()
   if ns.announceNextEval then
     ns.announceNextEval = false
     if ns.Settings().chatAlert then
-      ns.Print(("Auctionator prices updated - %d item(s) flagged |cff00ff00Shuffle me!|r (/shuffle)"):format(shuffleCount))
+      ns.Print(("Auctionator prices updated - %d item(s) flagged |cff00ff00Shuffle me!|r (/mtf)"):format(shuffleCount))
     end
   end
   if ns.RefreshUI then ns.RefreshUI() end
@@ -345,7 +345,7 @@ local function AddTooltipLine(tooltip, itemID)
   local res = itemID and ns.flaggedByItem[itemID]
   if not res then return end
   tooltip:AddLine(" ")
-  tooltip:AddDoubleLine("|cff00ff00CraftShuffler: Shuffle me!|r", "+" .. ns.Money(res.profit) .. " / craft")
+  tooltip:AddDoubleLine("|cff00ff00Money Talks: Shuffle me!|r", "+" .. ns.Money(res.profit) .. " / craft")
   tooltip:AddDoubleLine("  reagents (AH)", ns.Money(res.cost), 0.8, 0.8, 0.8, 1, 1, 1)
   tooltip:AddDoubleLine("  vendor value x" .. res.qty, ns.Money(res.vendorValue), 0.8, 0.8, 0.8, 1, 1, 1)
 end

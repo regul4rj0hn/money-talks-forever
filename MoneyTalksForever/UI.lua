@@ -1,4 +1,4 @@
--- CraftShuffler: results window.
+-- Money Talks Forever: results window.
 local _, ns = ...
 
 local ROW_H = 20
@@ -492,8 +492,8 @@ local function RefreshProfit(panel)
   frame.summary:SetText("")
 end
 
-StaticPopupDialogs["CRAFTSHUFFLER_RESET_LEDGER"] = {
-  text = "Reset CraftShuffler's profit history for this character?",
+StaticPopupDialogs["MONEYTALKSFOREVER_RESET_LEDGER"] = {
+  text = "Reset Money Talks Forever's profit history for this character?",
   button1 = YES, button2 = NO,
   OnAccept = function() ns.ResetLedger() end,
   timeout = 0, whileDead = true, hideOnEscape = true,
@@ -512,7 +512,7 @@ end
 local function CreateUI()
   local width = math.max(TableWidth(COLS), TableWidth(FLIP_COLS))
 
-  frame = CreateFrame("Frame", "CraftShufflerFrame", UIParent, "BasicFrameTemplateWithInset")
+  frame = CreateFrame("Frame", "MoneyTalksForeverFrame", UIParent, "BasicFrameTemplateWithInset")
   frame:SetSize(width + 20, 480)
   frame:SetPoint("CENTER")
   frame:SetMovable(true)
@@ -523,11 +523,11 @@ local function CreateUI()
   frame:SetFrameStrata("HIGH")
   frame:SetClampedToScreen(true)
   frame:Hide()
-  tinsert(UISpecialFrames, "CraftShufflerFrame") -- close with Escape
+  tinsert(UISpecialFrames, "MoneyTalksForeverFrame") -- close with Escape
 
   frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   frame.title:SetPoint("TOP", 0, -5)
-  frame.title:SetText("CraftShuffler v" .. ns.VERSION)
+  frame.title:SetText("Money Talks Forever v" .. ns.VERSION)
 
   -- Tabs
   frame.tabButtons = {
@@ -569,7 +569,7 @@ local function CreateUI()
   -- Profit tab: summary block and reset
   CreateProfitSummary(frame.panels.profit)
   local reset = SimpleButton(frame.panels.profit, "Reset", 80, function()
-    StaticPopup_Show("CRAFTSHUFFLER_RESET_LEDGER")
+    StaticPopup_Show("MONEYTALKSFOREVER_RESET_LEDGER")
   end, "Reset profit history", "Clears this character's tracked purchases, stock and profits.")
   reset:SetPoint("TOPLEFT", frame.panels.profit, "BOTTOMLEFT", 12, -8)
 
@@ -591,8 +591,8 @@ local function CreateUI()
   local shop = SimpleButton(frame, "Shopping list", 110, function()
     if ns.Settings().tab == "flips" then ns.CreateFlipsShoppingList() else ns.CreateShoppingList() end
   end, "Auctionator shopping list",
-    "Crafts tab: the 'CraftShuffler' list of reagents for your Shuffle me! recipes, capped at the most you can pay. "
-    .. "Vendor flips tab: the 'CraftShuffler Flips' list, capped below vendor price. Buy every listing up to the cap.")
+    "Crafts tab: the 'Money Talks Forever' list of reagents for your Shuffle me! recipes, capped at the most you can pay. "
+    .. "Vendor flips tab: the 'Money Talks Forever Flips' list, capped below vendor price. Buy every listing up to the cap.")
   shop:SetPoint("RIGHT", refresh, "LEFT", -6, 0)
   frame.shopButton = shop
 

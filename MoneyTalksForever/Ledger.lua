@@ -1,4 +1,4 @@
--- CraftShuffler: "profit so far" ledger.
+-- Money Talks Forever: "profit so far" ledger.
 --
 -- Tracks real money, per character:
 --   * purchases (AH and NPC vendors) put items in stock at what you paid (average cost per item)
@@ -23,7 +23,7 @@ local function Today() return date("%Y-%m-%d") end
 
 function ns.Ledger()
   local key = ns.CharKey()
-  local all = CraftShufflerDB.ledger
+  local all = MoneyTalksForeverDB.ledger
   if not all[key] then
     all[key] = { bought = {}, crafted = {}, all = NewBucket(), days = {}, items = {}, since = time() }
   end
@@ -237,7 +237,7 @@ function ns.LedgerStockValue()
 end
 
 function ns.ResetLedger()
-  CraftShufflerDB.ledger[ns.CharKey()] = nil
+  MoneyTalksForeverDB.ledger[ns.CharKey()] = nil
   ns.session = NewBucket()
   ns.sessionStart = nil
   if ns.OnLedgerChanged then ns.OnLedgerChanged() end
@@ -464,7 +464,7 @@ f:SetScript("OnEvent", function(_, event, ...)
   elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
     local unit, _, spellID = ...
     -- Profession recipe IDs are the spell IDs of the craft.
-    local recipe = unit == "player" and CraftShufflerDB and ns.CharStore().recipes[spellID]
+    local recipe = unit == "player" and MoneyTalksForeverDB and ns.CharStore().recipes[spellID]
     if recipe then ns.RecordCraft(recipe) end
   end
 end)

@@ -1,4 +1,4 @@
--- CraftShuffler: records learned recipes + their required reagents when a profession window is open.
+-- Money Talks Forever: records learned recipes + their required reagents when a profession window is open.
 local _, ns = ...
 
 local scanPending = false

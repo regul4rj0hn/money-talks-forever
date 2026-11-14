@@ -7,7 +7,7 @@
 set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
-TOC=CraftShuffler/CraftShuffler.toc
+TOC=MoneyTalksForever/MoneyTalksForever.toc
 CHANGELOG=CHANGELOG.md
 
 die() { echo "release: $*" >&2; exit 1; }
@@ -48,7 +48,7 @@ sed -i "s/^## \[Unreleased\]$/## [Unreleased]\n\n## [$next] - $today/" "$CHANGEL
 
 git add "$TOC" "$CHANGELOG"
 git commit -q -m "Release $tag"
-git tag -a "$tag" -m "CraftShuffler $tag"
+git tag -a "$tag" -m "Money Talks Forever $tag"
 echo "Tagged $tag ($current -> $next)."
 
 if [[ "$push" == "--push" ]]; then
