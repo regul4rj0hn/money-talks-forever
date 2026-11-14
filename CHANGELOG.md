@@ -6,6 +6,8 @@ Each version is a [GitHub release](https://github.com/regul4rj0hn/money-talks-fo
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-14
+
 ### Fixed
 - Opening a profession window while the game was still loading its recipe list could erase that profession's
   recorded recipes.
