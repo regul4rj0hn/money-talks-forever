@@ -6,6 +6,8 @@ Each version is a [GitHub release](https://github.com/regul4rj0hn/money-talks-fo
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-11-15
+
 ### Added
 - **Conversions**: right-click conversions anyone can do, 3 lesser <-> 1 greater enchanting essence (Magic, Astral,
   Mystic, Nether, Eternal), are priced like recipes and listed in the Crafts tab as profession "Convert". They find
