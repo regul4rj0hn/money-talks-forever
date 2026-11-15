@@ -6,6 +6,8 @@ Each version is a [GitHub release](https://github.com/regul4rj0hn/money-talks-fo
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-15
+
 ### Added
 - **Clear session** and **Clear all** buttons on the Overview (Clear all also on the Profit tab, replacing Reset),
   and `/mtf profit session`. Both ask for confirmation.

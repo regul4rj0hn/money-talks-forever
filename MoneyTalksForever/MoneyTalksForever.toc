@@ -2,7 +2,7 @@
 ## Title: Money Talks Forever
 ## Notes: Make gold with crafts, flips and smart AH selling, using Auctionator prices. Tracks your real profit.
 ## IconTexture: Interface\Icons\INV_Misc_Coin_02
-## Version: 0.6.0
+## Version: 0.7.0
 ## OptionalDeps: Auctionator
 ## SavedVariables: MoneyTalksForeverDB
 
