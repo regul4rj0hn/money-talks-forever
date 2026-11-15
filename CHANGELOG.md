@@ -6,6 +6,8 @@ Each version is a [GitHub release](https://github.com/regul4rj0hn/money-talks-fo
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-15
+
 ### Removed
 - The one-time import of CraftShuffler data and the `/shuffle` command alias. Use `/mtf`.
 
