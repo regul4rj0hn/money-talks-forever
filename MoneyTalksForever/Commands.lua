@@ -27,15 +27,15 @@ local function PrintShuffleList()
   ns.Evaluate()
   local n = 0
   for _, r in ipairs(ns.results) do
-    if r.status == ns.STATUS.SHUFFLE then
+    if ns.IsProfitable(r) then
       n = n + 1
-      print(("  %s x%d  cost %s  vendor %s  %s%s"):format(
-        r.itemLink or r.name, r.qty, ns.Money(r.cost), ns.Money(r.vendorValue),
-        ns.Colorize("+" .. ns.Money(r.profit), ns.COLOR.GREEN),
-        r.usesCrafting and ("  " .. ns.Colorize("(buy + craft)", ns.COLOR.BLUE)) or ""))
+      local sell = r.status == ns.STATUS.LIST and ("AH " .. ns.Money(r.auctionNet)) or ("vendor " .. ns.Money(r.vendorValue))
+      print(("  %s x%d  cost %s  %s  %s  %s%s"):format(
+        r.itemLink or r.name, r.qty, ns.Money(r.cost), sell, ns.Colorize("+" .. ns.Money(r.bestProfit), ns.COLOR.GREEN),
+        ns.StatusText(r.status), r.usesCrafting and ("  " .. ns.Colorize("(buy + craft)", ns.COLOR.BLUE)) or ""))
     end
   end
-  ns.Print(n .. " item(s) flagged 'Shuffle me!'")
+  ns.Print(n .. " profitable item(s)")
 end
 
 -- Diagnostic dump for troubleshooting (no personal data).
@@ -65,7 +65,7 @@ end
 -- In the order shown by /mtf help. `usage` is what follows /mtf; `help` may be a function for live values.
 local COMMANDS = {
   { name = "", help = "toggle the window", run = function() ns.ToggleUI() end },
-  { name = "list", help = "print all 'Shuffle me!' items to chat", run = PrintShuffleList },
+  { name = "list", help = "print all 'Shuffle me!' and 'List me!' items to chat", run = PrintShuffleList },
   { name = "shop", help = "create an Auctionator shopping list of reagents with max prices",
     run = function() ns.CreateReagentShoppingList() end },
   { name = "flips", help = "show AH listings cheaper than their vendor price",

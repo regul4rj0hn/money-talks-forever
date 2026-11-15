@@ -1,18 +1,39 @@
--- Money Talks Forever: the "Shuffle me!" evaluation of recorded recipes.
---   cost of a craft     = cheapest way to get each required reagent: buy it, or craft it from your own recipes
+-- Money Talks Forever: evaluation of recorded recipes and built-in conversions (Conversions.lua).
+--   cost of a craft     = cheapest way to get each required reagent: buy it, or craft/convert it yourself
 --   plan                = what to buy and craft, in order, for one craft
---   vendor/AH value     = what the crafted item sells for; "Shuffle me!" when vendor value - cost >= min profit
+--   vendor/AH value     = what the crafted item sells for
+--   "Shuffle me!"       = vendor value - cost >= min profit (a sure sale)
+--   "List me!"          = otherwise, AH value after the cut - cost >= min profit (if it sells)
 local _, ns = ...
 
 ns.results = {}          -- evaluated rows, sorted (see EvaluateRecipe)
-ns.flaggedByItem = {}    -- [outputItemID] = best "Shuffle me!" row for that item
+ns.flaggedByItem = {}    -- [outputItemID] = best profitable row for that item
 
 ns.STATUS = {
-  SHUFFLE = 1,   -- reagent cost < vendor value  -> "Shuffle me!"
-  NOPROFIT = 2,  -- priced, but not profitable
-  MISSING = 3,   -- at least one reagent has no AH/vendor price
-  LOADING = 4,   -- item data not cached yet
+  SHUFFLE = 1,   -- profitable to sell to a vendor -> "Shuffle me!"
+  LIST = 2,      -- profitable to sell on the AH only -> "List me!"
+  NOPROFIT = 3,  -- priced, but not profitable
+  MISSING = 4,   -- at least one reagent has no AH/vendor price
+  LOADING = 5,   -- item data not cached yet
 }
+
+local STATUS_LABEL = {
+  [ns.STATUS.SHUFFLE] = { "Shuffle me!", "GREEN" },
+  [ns.STATUS.LIST] = { "List me!", "GOLD" },
+  [ns.STATUS.NOPROFIT] = { "no profit", "GREY" },
+  [ns.STATUS.MISSING] = { "no price", "ORANGE" },
+  [ns.STATUS.LOADING] = { "loading...", "GREY" },
+}
+
+-- A status as colored text, e.g. a green "Shuffle me!".
+function ns.StatusText(status)
+  local l = STATUS_LABEL[status]
+  return l and ns.Colorize(l[1], ns.COLOR[l[2]]) or ""
+end
+
+function ns.IsProfitable(res)
+  return res.status == ns.STATUS.SHUFFLE or res.status == ns.STATUS.LIST
+end
 
 -- Enum.ItemBind: None=0, OnAcquire(BoP)=1, OnEquip=2, OnUse=3, Quest=4, ToWoWAccount=7, ToBnetAccount=8, ...
 -- Only items that are NOT soulbound once crafted qualify by default.
@@ -36,13 +57,22 @@ end
 
 local ItemName = ns.ItemName
 
+-- Everything that can be made: this character's recorded recipes and the conversions anyone can do.
+local function AllRecipes()
+  local all = {}
+  for id, r in pairs(ns.CharStore().recipes) do all[id] = r end
+  for id, r in pairs(ns.Conversions()) do all[id] = r end
+  return all
+end
+
 -- Pricing context for one evaluation pass:
 --   byOutput[itemID] = { recipe, ... }  recipes you know that produce itemID
 --   memo[itemID]     = cached resolved price
---   visiting[itemID] = true while resolving (cycle guard, e.g. cloth <-> bolt conversions)
+--   visiting[itemID] = true while that item is being made (cycle guard, e.g. cloth <-> bolt, lesser <-> greater
+--                      essence): an item can't be an ingredient anywhere in its own production chain
 local function NewContext()
   local ctx = { byOutput = {}, memo = {}, visiting = {} }
-  for _, r in pairs(ns.CharStore().recipes) do
+  for _, r in pairs(AllRecipes()) do
     if r.outputItemID then
       ctx.byOutput[r.outputItemID] = ctx.byOutput[r.outputItemID] or {}
       table.insert(ctx.byOutput[r.outputItemID], r)
@@ -53,12 +83,25 @@ end
 
 local CostReagents -- forward declaration (mutual recursion)
 
+local NO_PRICE = {} -- an item being made can't be its own ingredient (read-only)
+
+-- True if a cached price consumed an item that is being made right now, so it isn't valid here.
+local function UsesVisiting(uses, visiting)
+  if not uses then return false end
+  for id in pairs(visiting) do
+    if uses[id] then return true end
+  end
+  return false
+end
+
 -- Cheapest per-unit price for a reagent: buy it (AH / vendor) or craft it from your own known recipes.
--- Returns a table { unit, source, buyUnit, buySource, craftUnit, craftName } (unit may be nil) and a
+-- Returns a table { unit, source, buyUnit, buySource, craftUnit, craftName, uses } (unit may be nil) and a
 -- "cut" flag that is true when a recipe cycle was cut short (such results are not memoized).
+-- uses = every item a crafted price consumes, all the way down.
 local function ResolveUnitPrice(itemID, ctx)
+  if ctx.visiting[itemID] then return NO_PRICE, true end
   local cached = ctx.memo[itemID]
-  if cached then return cached, false end
+  if cached and not UsesVisiting(cached.uses, ctx.visiting) then return cached, false end
 
   local p = {}
   p.buyUnit, p.buySource = ns.GetReagentUnitPrice(itemID)
@@ -66,26 +109,22 @@ local function ResolveUnitPrice(itemID, ctx)
   local cut = false
   local recipes = ns.Settings().craftReagents and ctx.byOutput[itemID]
   if recipes then
-    if ctx.visiting[itemID] then
-      cut = true
-    else
-      ctx.visiting[itemID] = true
-      for _, rec in ipairs(recipes) do
-        local cost, _, missing, subCut = CostReagents(rec, ctx)
-        cut = cut or subCut
-        if cost and #missing == 0 then
-          local perUnit = cost / math.max(1, rec.qtyMin or 1)
-          if not p.craftUnit or perUnit < p.craftUnit then
-            p.craftUnit, p.craftName, p.craftRecipe = perUnit, rec.name, rec
-          end
+    ctx.visiting[itemID] = true
+    for _, rec in ipairs(recipes) do
+      local cost, _, missing, subCut, uses = CostReagents(rec, ctx)
+      cut = cut or subCut
+      if cost and #missing == 0 then
+        local perUnit = cost / math.max(1, rec.qtyMin or 1)
+        if not p.craftUnit or perUnit < p.craftUnit then
+          p.craftUnit, p.craftName, p.craftRecipe, p.craftUses = perUnit, rec.name, rec, uses
         end
       end
-      ctx.visiting[itemID] = nil
     end
+    ctx.visiting[itemID] = nil
   end
 
   if p.craftUnit and (not p.buyUnit or p.craftUnit < p.buyUnit) then
-    p.unit, p.source = p.craftUnit, "craft"
+    p.unit, p.source, p.uses = p.craftUnit, "craft", p.craftUses
   else
     p.unit, p.source = p.buyUnit, p.buySource
   end
@@ -105,9 +144,10 @@ local function BestOption(slot, ctx)
   return best, bestID, cut
 end
 
--- Total cost of one craft of recipe r. Returns cost (nil if anything is unpriced), breakdown, missing, cut.
+-- Total cost of one craft of recipe r. Returns cost (nil if anything is unpriced), breakdown, missing, cut,
+-- and uses: every item the chosen options consume, all the way down.
 CostReagents = function(r, ctx)
-  local cost, breakdown, missing, cut = 0, {}, {}, false
+  local cost, breakdown, missing, cut, uses = 0, {}, {}, false, {}
   for _, slot in ipairs(r.reagents) do
     if slot.currencyID and #slot.items == 0 then
       local cinfo = C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo(slot.currencyID)
@@ -125,18 +165,20 @@ CostReagents = function(r, ctx)
         line.craftUnit, line.craftName = best.craftUnit, best.craftName
         line.total = best.unit * slot.qty
         cost = cost + line.total
+        uses[bestID] = true
+        for id in pairs(best.uses or {}) do uses[id] = true end
       else
         table.insert(missing, line.name)
       end
       table.insert(breakdown, line)
     end
   end
-  return (#missing == 0) and cost or nil, breakdown, missing, cut
+  return (#missing == 0) and cost or nil, breakdown, missing, cut, uses
 end
 
 -- Turns the cheapest pricing decisions into concrete steps for one craft of `r`:
 --   plan.buys      = { {itemID, name, qty, unit, source, total}, ... }  everything to purchase, summed over all levels
---   plan.crafts    = { {itemID, name, count}, ... }  intermediate crafts in the order to perform them
+--   plan.crafts    = { {itemID, name, count, recipe}, ... }  intermediate crafts in the order to perform them
 --   plan.choices   = { {itemID, name, buyUnit, craftUnit, source}, ... }  reagents where crafting was an option
 --   plan.leftovers = { {itemID, name, qty}, ... }  surplus from crafts that yield more than needed
 -- Integer craft counts are used here, while res.cost amortizes per unit, so plan.buyTotal may be slightly higher.
@@ -172,7 +214,7 @@ local function BuildPlan(r, ctx)
       -- Appended after its own reagents, so the list is already in crafting order.
       local c = craftIdx[itemID]
       if not c then
-        c = { itemID = itemID, name = ItemName(itemID), count = 0 }
+        c = { itemID = itemID, name = ItemName(itemID), count = 0, recipe = rec }
         craftIdx[itemID] = c
         table.insert(plan.crafts, c)
       end
@@ -209,6 +251,7 @@ function ns.EvaluateRecipe(recipeID, r, ctx)
   ctx = ctx or NewContext()
   local res = {
     recipeID = recipeID,
+    recipe = r,
     name = r.name,
     profession = r.profession,
     itemID = r.outputItemID,
@@ -264,22 +307,29 @@ function ns.EvaluateRecipe(recipeID, r, ctx)
   res.profit = res.vendorValue - cost
   if res.auctionNet then res.auctionProfit = res.auctionNet - cost end
 
-  -- Highest price per bought reagent that still leaves the minimum profit (others at current price).
-  local slack = res.vendorValue - res.plan.buyTotal - ns.Settings().minProfit
-  for _, b in ipairs(res.plan.buys) do
-    if b.unit and slack >= 0 then b.maxPrice = math.floor(b.unit + slack / b.qty) end
-  end
-  if res.vendorValue > 0 and res.profit >= ns.Settings().minProfit then
-    res.status = S.SHUFFLE
+  -- The status picks the way to sell; bestProfit is the profit that way (unprofitable: the better of the two).
+  local minProfit, sellValue = ns.Settings().minProfit, nil
+  if res.vendorValue > 0 and res.profit >= minProfit then
+    res.status, res.bestProfit, sellValue = S.SHUFFLE, res.profit, res.vendorValue
+  elseif res.auctionProfit and res.auctionProfit >= minProfit then
+    res.status, res.bestProfit, sellValue = S.LIST, res.auctionProfit, res.auctionNet
   else
-    res.status = S.NOPROFIT
+    res.status, res.bestProfit = S.NOPROFIT, math.max(res.profit, res.auctionProfit or res.profit)
+  end
+
+  -- Highest price per bought reagent that still leaves the minimum profit (others at current price).
+  if sellValue then
+    local slack = sellValue - res.plan.buyTotal - minProfit
+    for _, b in ipairs(res.plan.buys) do
+      if b.unit and slack >= 0 then b.maxPrice = math.floor(b.unit + slack / b.qty) end
+    end
   end
   return res
 end
 
 local function SortResults(a, b)
   if a.status ~= b.status then return a.status < b.status end
-  local pa, pb = a.profit or -math.huge, b.profit or -math.huge
+  local pa, pb = a.bestProfit or -math.huge, b.bestProfit or -math.huge
   if pa ~= pb then return pa > pb end
   return (a.recipeID or 0) < (b.recipeID or 0)
 end
@@ -287,27 +337,28 @@ end
 function ns.Evaluate()
   if not MoneyTalksForeverDB then return end
   ns.waitingForItems = false
-  local results, flagged, shuffleCount = {}, {}, 0
+  local results, flagged, counts = {}, {}, {}
   local ctx = NewContext()
-  for recipeID, r in pairs(ns.CharStore().recipes) do
+  for recipeID, r in pairs(AllRecipes()) do
     local res = ns.EvaluateRecipe(recipeID, r, ctx)
     if res then
       table.insert(results, res)
-      if res.status == ns.STATUS.SHUFFLE then
-        shuffleCount = shuffleCount + 1
-        local prev = flagged[res.itemID]
-        if not prev or res.profit > prev.profit then flagged[res.itemID] = res end
-      end
+      counts[res.status] = (counts[res.status] or 0) + 1
     end
   end
   table.sort(results, SortResults)
+  -- Sorted best first, so the first profitable row of an item is its best.
+  for _, res in ipairs(results) do
+    if ns.IsProfitable(res) and not flagged[res.itemID] then flagged[res.itemID] = res end
+  end
   ns.results, ns.flaggedByItem = results, flagged
 
   if ns.announceNextEval then
     ns.announceNextEval = false
     if ns.Settings().chatAlert then
-      ns.Print(("Auctionator prices updated - %d item(s) flagged %s (/mtf)"):format(
-        shuffleCount, ns.Colorize("Shuffle me!", ns.COLOR.GREEN)))
+      local S = ns.STATUS
+      ns.Print(("Auctionator prices updated - %d %s, %d %s (/mtf)"):format(
+        counts[S.SHUFFLE] or 0, ns.StatusText(S.SHUFFLE), counts[S.LIST] or 0, ns.StatusText(S.LIST)))
     end
   end
   ns.NotifyUI()

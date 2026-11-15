@@ -125,13 +125,13 @@ function ns.OnMailClosed()
   if ns.Settings().chatAlert and (visit.sales > 0 or visit.returned > 0) then
     local parts = {}
     if visit.sales > 0 then
-      table.insert(parts, ("%d AH sale(s) collected, %s, |cff00ff00%s profit|r"):format(
-        visit.sales, ns.Money(visit.earned), ns.Money(visit.profit)))
+      table.insert(parts, ("%d AH sale(s) collected, %s, %s"):format(
+        visit.sales, ns.Money(visit.earned), ns.ProfitOrLoss(visit.profit)))
     end
     if visit.returned > 0 then
       table.insert(parts, ("%d auction(s) came back, %s deposit lost"):format(visit.returned, ns.Money(visit.lost)))
     end
-    ns.Print("mailbox: " .. table.concat(parts, "; ") .. (" (session %s)"):format(ns.Money(ns.BucketProfit(ns.session))))
+    ns.Print("mailbox: " .. table.concat(parts, "; ") .. (" (session %s)"):format(ns.ProfitMoney(ns.BucketProfit(ns.session))))
   end
 end
 

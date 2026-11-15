@@ -25,6 +25,18 @@ function UI.TableWidth(cols)
   return w
 end
 
+-- Hover tooltip: a title and wrapped white text.
+local function AttachTooltip(b, title, text)
+  if not title then return end
+  b:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:AddLine(title)
+    GameTooltip:AddLine(text, 1, 1, 1, true)
+    GameTooltip:Show()
+  end)
+  b:SetScript("OnLeave", GameTooltip_Hide)
+end
+
 -- Creates the row's icon + one font string per column, once per recycled row frame.
 -- Shift-clicking a row links its item in chat.
 function UI.BuildCells(row, cols, onEnter)
@@ -72,6 +84,12 @@ function UI.CreateTable(parent, cols, initializer)
     h:SetWidth(col.width - 6)
     h:SetJustifyH(col.justify)
     h:SetText(col.label)
+    if col.tip then -- hover the header for what the column means
+      local hover = CreateFrame("Frame", nil, panel)
+      hover:SetPoint("TOPLEFT", x, 2)
+      hover:SetSize(col.width - 6, 16)
+      AttachTooltip(hover, col.label, col.tip)
+    end
     x = x + col.width
   end
 
@@ -103,17 +121,6 @@ end
 
 function UI.SetRows(panel, list)
   panel.scrollBox:SetDataProvider(CreateDataProvider(list), ScrollBoxConstants.RetainScrollPosition)
-end
-
-local function AttachTooltip(b, title, text)
-  if not title then return end
-  b:SetScript("OnEnter", function(self)
-    GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:AddLine(title)
-    GameTooltip:AddLine(text, 1, 1, 1, true)
-    GameTooltip:Show()
-  end)
-  b:SetScript("OnLeave", GameTooltip_Hide)
 end
 
 -- A standard button with an optional hover tooltip.

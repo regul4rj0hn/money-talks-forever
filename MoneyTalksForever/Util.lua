@@ -42,6 +42,13 @@ function ns.ProfitMoney(copper)
   return ns.Colorize(ns.Money(copper), copper >= 0 and ns.COLOR.GREEN or ns.COLOR.RED)
 end
 
+-- "12s profit" in green, or "3s loss" in red: never a "-3s profit".
+function ns.ProfitOrLoss(copper)
+  copper = math.floor((copper or 0) + 0.5)
+  if copper < 0 then return ns.Colorize(ns.Money(-copper) .. " loss", ns.COLOR.RED) end
+  return ns.Colorize(ns.Money(copper) .. " profit", ns.COLOR.GREEN)
+end
+
 function ns.OnOff(v)
   return v and ns.Colorize("on", ns.COLOR.GREEN) or ns.Colorize("off", ns.COLOR.RED)
 end

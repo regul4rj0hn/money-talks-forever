@@ -256,9 +256,10 @@ function ns.BucketProfit(b)
   return (b.crafts.earned - b.crafts.cost) + (b.flips.earned - b.flips.cost)
 end
 
--- Crafting a recorded recipe. Profession recipe IDs are the spell IDs of the craft.
+-- Crafting a recorded recipe (profession recipe IDs are the spell IDs of the craft), or using an item that
+-- converts into another (Conversions.lua).
 ns.On("UNIT_SPELLCAST_SUCCEEDED", function(unit, _, spellID)
   if unit ~= "player" or not MoneyTalksForeverDB then return end
-  local recipe = ns.CharStore().recipes[spellID]
+  local recipe = ns.CharStore().recipes[spellID] or ns.ConversionBySpell(spellID)
   if recipe then ns.RecordCraft(recipe) end
 end)

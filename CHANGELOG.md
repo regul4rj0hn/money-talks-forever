@@ -6,6 +6,25 @@ Each version is a [GitHub release](https://github.com/regul4rj0hn/money-talks-fo
 
 ## [Unreleased]
 
+### Added
+- **Conversions**: right-click conversions anyone can do, 3 lesser <-> 1 greater enchanting essence (Magic, Astral,
+  Mystic, Nether, Eternal), are priced like recipes and listed in the Crafts tab as profession "Convert". They find
+  AH arbitrage, and a recipe needing a greater essence is priced with 3 lesser combined when that's cheaper. Using
+  the item is recorded by the profit tracking like a craft.
+- **"List me!"**: crafts that only profit when sold on the AH (after the 5% cut) are flagged, go on the shopping
+  list with caps based on the AH value, and show on the Overview and in item tooltips. The Profit column shows the
+  profit of the flagged way of selling.
+- Row tooltips spell out every step: 1. buy, 2. make (crafts, and conversions as "Convert 1x Greater ... into
+  3x Lesser ... (right-click)"), 3. list on the AH or sell to a vendor. The Reagents column says `split` or
+  `combine` for conversions.
+
+- Column headers explain themselves on hover, e.g. what `AH 7%+` in **Sell via** means.
+
+### Fixed
+- Negative amounts read "-1s 43c profit" in row tooltips and chat summaries; they now read "1s 43c loss" in red.
+- A reagent could be priced by a chain that uses the item being made, e.g. a Greater essence "combined" from Lesser
+  ones split from a Greater. An item is no longer an ingredient anywhere in its own production chain.
+
 ## [0.7.0] - 2026-11-15
 
 ### Added

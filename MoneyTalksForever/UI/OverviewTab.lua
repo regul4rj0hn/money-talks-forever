@@ -247,12 +247,14 @@ local function Refresh(panel)
     cell.text:SetText(ProfitMoney(t.earned - t.cost))
   end
 
-  local shuffles = {}
-  for _, r in ipairs(ns.results) do -- sorted: "Shuffle me!" first, best profit first
-    if r.status ~= ns.STATUS.SHUFFLE or #shuffles == TOP_N then break end
-    table.insert(shuffles, r)
+  local best = {}
+  for _, r in ipairs(ns.results) do -- sorted: profitable first, best profit first
+    if not ns.IsProfitable(r) or #best == TOP_N then break end
+    table.insert(best, r)
   end
-  FillBox(panel.crafts, shuffles, function(r) return ProfitMoney(r.profit) .. " / craft" end)
+  FillBox(panel.crafts, best, function(r)
+    return ProfitMoney(r.bestProfit) .. (r.status == ns.STATUS.LIST and " / craft (AH)" or " / craft")
+  end)
 
   local flips = {}
   for i = 1, math.min(TOP_N, #ns.flips.items) do flips[i] = ns.flips.items[i] end

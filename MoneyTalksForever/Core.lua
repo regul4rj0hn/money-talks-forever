@@ -13,7 +13,7 @@ local DEFAULTS = {
   useVendorReagentPrice = true, -- reagent price = min(AH price, NPC vendor buy price known to Auctionator)
   craftReagents = true,         -- reagents you can craft yourself are priced at min(buy price, craft cost)
   includeSoulbound = false,     -- also evaluate Bind-on-Pickup / account-bound crafted items
-  onlyShuffle = false,          -- crafts tab filter: only "Shuffle me!" rows
+  onlyShuffle = false,          -- crafts tab filter: only profitable rows ("Shuffle me!" and "List me!")
   minProfit = 1,                -- copper; vendor value - reagent cost must be >= this to be flagged
   flipMinProfit = 1,            -- copper; a listing must make at least this when vendored to count as a flip
   ahDuration = 1,               -- auction duration used for deposits: 1 = 12h, 2 = 24h, 3 = 48h

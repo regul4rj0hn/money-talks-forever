@@ -3,8 +3,10 @@
 A World of Warcraft: Forever addon for making gold, using Auctionator's prices:
 
 - **Crafts:** flags craftable items as **"Shuffle me!"** when their reagents cost less on the Auction House
-  than the crafted item sells for to a vendor. It shows a step-by-step buy and craft plan, and creates a shopping list
-  with the most you can pay per reagent.
+  than the crafted item sells for to a vendor, or **"List me!"** when it only profits on the AH. It shows a
+  step-by-step buy and craft plan, and creates a shopping list with the most you can pay per reagent.
+- **Conversions:** right-click conversions anyone can do (3 lesser <-> 1 greater enchanting essence) are priced like
+  recipes, both for AH arbitrage and as a cheaper way to get reagents.
 - **Flips:** finds AH listings priced below what a vendor pays for them.
 - **AH or vendor:** tells you when listing on the AH beats vendoring, deposit risk included.
 - **Profit so far:** tracks what you actually paid and earned from crafts, flips and AH sales, per session, day and
@@ -17,7 +19,8 @@ on the right switch tabs.
 
 ![Overview](docs/screenshots/overview.png)
 
-**Crafts:** every recorded recipe with reagent cost, vendor and auction value, and the "Shuffle me!" verdict.
+**Crafts:** every recorded recipe and conversion with reagent cost, vendor and auction value, and the verdict:
+"Shuffle me!" to sell to a vendor, "List me!" to sell on the AH.
 
 ![Crafts tab](docs/screenshots/crafts.png)
 
@@ -44,10 +47,28 @@ on the right switch tabs.
      Optional or finishing reagents are ignored. If a slot accepts several items (e.g. quality ranks), the cheapest
      one is used.
    - **Vendor value** = item vendor sell price x guaranteed minimum output quantity.
-   - **Auction value** = Auctionator price of the crafted item x the same quantity, for comparison. It is shown in
-     gold when selling on the AH, after the 5% AH cut, beats vendoring. The row tooltip shows the profit for both
-     ways of selling. The "Shuffle me!" flag is still based on vendor value only.
-   - If `reagent cost < vendor value`, the item is flagged **Shuffle me!**
+   - **Auction value** = Auctionator price of the crafted item x the same quantity. It is shown in gold when selling
+     on the AH, after the 5% AH cut, beats vendoring. The row tooltip shows the profit for both ways of selling.
+   - If `vendor value - reagent cost` is at least your minimum profit, the item is flagged **Shuffle me!**: a sure
+     sale to any vendor.
+   - Otherwise, if `auction value after the 5% cut - reagent cost` is, it is flagged **List me!**: profitable if it
+     sells on the AH. **Sell via** shows how often it must sell for listing to beat vendoring, deposit included.
+   - **Profit** is the profit of the flagged way of selling; for unprofitable rows, the better of the two.
+   - A reagent is never made from the item being crafted, e.g. no Greater essence from Lesser ones split from a
+     Greater.
+
+### Conversions
+
+Some items turn into others when you right-click them, no profession needed: 1 Greater Magic Essence splits into 3
+Lesser, and 3 Lesser combine into 1 Greater (also Astral, Mystic, Nether and Eternal essences). Every character
+knows these, so they are listed in the Crafts tab as profession **Convert**:
+
+- **Arbitrage:** e.g. Greater at 3s 73c and Lesser at 1s 50c: split and list the 3 Lesser for 4s 27c after the cut,
+  **List me!** for 54c. At 1s 30c it's a loss (3s 70c after the cut), and the row says so.
+- **Cheaper reagents:** a recipe that needs a Greater essence is priced with 3 Lesser combined when that's cheaper,
+  and its plan says so.
+- **Profit tracking:** right-clicking the item is recorded like a craft, so the essences you get carry the cost of
+  the ones you used.
 
 Prices are re-evaluated automatically whenever Auctionator finishes a scan.
 
@@ -64,7 +85,7 @@ kept. Or copy the `MoneyTalksForever` folder from this repo. Requires
 | Command | Effect |
 |---|---|
 | `/mtf` | Toggle the window (hover a row for the reagent breakdown, shift-click to link) |
-| `/mtf list` | Print every "Shuffle me!" item to chat |
+| `/mtf list` | Print every "Shuffle me!" and "List me!" item to chat |
 | `/mtf vendor` | Toggle using NPC vendor prices for reagents (default on) |
 | `/mtf craft` | Toggle pricing craftable reagents at their own craft cost when cheaper (default on) |
 | `/mtf soulbound` | Toggle including soulbound crafts (default off) |
@@ -78,31 +99,43 @@ kept. Or copy the `MoneyTalksForever` folder from this repo. Requires
 | `/mtf duration 12\|24\|48` | Auction duration used for deposits (default 12h) |
 | `/mtf reset` | Forget this character's recorded recipes |
 
-The **Reagents** column shows `buy all` when every reagent should be bought, or `buy + craft` when it is cheaper to
-craft some reagents yourself first. Hover a row for the step-by-step plan:
+The **Reagents** column shows `buy all` when every reagent should be bought, `buy + craft` when it is cheaper to
+craft some reagents yourself first, or `split` / `combine` for conversions. Hover a row for the step-by-step plan:
 
 ```
 1. Buy:
     6x Linen Cloth                 120c (AH)
-2. Craft, in this order:
+2. Make, in this order:
     3x Bolt of Linen Cloth
-    1x Linen Shirt  <- vendor this
+    1x Linen Shirt
+3. Sell 1x Linen Shirt to a vendor
 Craftable reagents             buy / craft each
     Bolt of Linen Cloth          60c / [40c]
+```
+
+For a conversion the steps say exactly what to right-click:
+
+```
+1. Buy:
+    1x Greater Nether Essence      1g 43s 92c (AH) max 1g 61s 16c
+2. Make, in this order:
+    Convert 1x Greater Nether Essence into 3x Lesser Nether Essence (right-click)
+3. List 3x Lesser Nether Essence on the AH (see above)
 ```
 
 Buy quantities are summed across all crafting levels, and leftovers are listed (e.g. a craft that makes 5 thread
 when you only need 2). The listed cost spreads a craft's price over everything it makes, so with leftovers it can be
 a bit lower than what you spend on one craft. The tooltip shows both numbers when they differ.
 
-Flagged items also get a "Shuffle me!" line in their item tooltip.
+Flagged items also get a "Shuffle me!" or "List me!" line in their item tooltip.
 
 ## Buying in volume: max prices and the shopping list
 
 For every bought reagent, the row tooltip shows a **max** price: the most you can pay per unit, with the other
 reagents at current prices, and still make your minimum profit. **Shopping list** (or `/mtf shop`) creates an
-Auctionator shopping list called `Money Talks Forever`. It holds every AH reagent of your "Shuffle me!" recipes, each capped
-at its highest max price across those recipes. At the AH, search the list and buy **every listing up to the max
+Auctionator shopping list called `Money Talks Forever`. It holds every AH reagent of your "Shuffle me!" and "List me!"
+recipes, each capped at its highest max price across those recipes ("List me!" caps are based on the AH value after
+the cut). At the AH, search the list and buy **every listing up to the max
 price**, not just one craft's worth. Reagents bought from NPC vendors are printed in chat instead.
 
 Auctionator applies the cap to an item's cheapest listing. When you open an item, more expensive listings are still
@@ -156,13 +189,19 @@ How it's tracked, per character:
 
 After each vendor or mailbox visit, chat shows the profit from tracked items. The per-item list shows whether each
 item sold to vendors, on the AH or both, and hovering a total shows the split and any deposits lost.
-**Reset** clears the history for the current character.
+**Clear session** and **Clear all** clear this session's or this character's history.
 
 ## AH or vendor?
 
-The **Sell via** column says `vendor`, or `AH 14%+`. The second means listing on the AH beats vendoring if the item
-sells at least 14% of the time. Unsold auctions come back by mail and can still be vendored, so listing only risks the
-deposit:
+The **Sell via** column says `vendor`, or `AH 14%+` (hover the column header for a reminder):
+
+- `vendor`: sell it to any vendor; the AH doesn't pay more.
+- `AH 14%+`: list it on the AH. It pays more than a vendor as long as at least 14 in 100 of your listings sell.
+  Unsold auctions come back by mail, so all you risk is the deposit, and you can still vendor them. A low number
+  (a few %) is a safe bet even for slow items; a high one (50%+) only pays off for items that sell reliably, so
+  check how often you see that item listed and sold.
+
+The number comes from:
 
 ```
 list on the AH if  chance it sells  >  deposit / (AH price after cut - vendor value + deposit)
@@ -185,7 +224,8 @@ Files load in the order listed in `MoneyTalksForever.toc` and share the addon na
 | `Core.lua` | Saved data and settings defaults |
 | `Auctionator.lua` | All calls to Auctionator's API: prices, shopping lists, the scan-finished callback |
 | `Scanner.lua` | Records learned recipes and their required reagents when a profession window opens |
-| `Pricing.lua` | Recipe evaluation: buy vs craft per reagent, the step-by-step plan, "Shuffle me!" |
+| `Conversions.lua` | Right-click conversions (essences) as built-in recipes, and the item spells that perform them |
+| `Pricing.lua` | Recipe evaluation: buy vs craft per reagent, the step-by-step plan, "Shuffle me!" / "List me!" |
 | `AuctionHouse.lua` | AH deposits, the AH-or-vendor verdict and the reagent shopping list |
 | `Flips.lua` | Flips: full scans and reading every AH listing |
 | `Tooltip.lua` | The "Shuffle me!" line on item tooltips |

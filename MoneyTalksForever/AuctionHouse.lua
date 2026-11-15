@@ -98,13 +98,13 @@ end
 ---------------------------------------------------------------------------
 ns.SHOPPING_LIST_NAME = "Money Talks Forever"
 
--- Highest price per reagent you can pay and still make the minimum profit, over all "Shuffle me!" recipes.
+-- Highest price per reagent you can pay and still make the minimum profit, over all profitable recipes.
 -- Returns a list of { itemID, name, maxPrice, unit, recipes } sorted by name, and { [itemID] = name } of
 -- reagents bought from NPC vendors.
 function ns.CollectShoppingCaps()
   local caps, vendorItems = {}, {}
   for _, r in ipairs(ns.results) do
-    if r.status == ns.STATUS.SHUFFLE and r.plan then
+    if ns.IsProfitable(r) and r.plan then
       for _, b in ipairs(r.plan.buys) do
         if b.source == "vendor" then
           vendorItems[b.itemID] = b.name
@@ -136,7 +136,7 @@ function ns.CreateReagentShoppingList()
     if name then table.insert(terms, { name = name, maxPrice = c.maxPrice }) end
   end
   if #terms == 0 then
-    ns.Print("nothing to buy - no 'Shuffle me!' recipe has room to pay more than current prices.")
+    ns.Print("nothing to buy - no profitable recipe has room to pay more than current prices.")
     return
   end
   local added, err = ns.CreateAuctionatorList(ns.SHOPPING_LIST_NAME, terms)

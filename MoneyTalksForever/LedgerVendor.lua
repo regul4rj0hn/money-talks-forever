@@ -71,8 +71,8 @@ function ns.OnMerchantClosed()
   if not merchant then return end
   MerchantDiff()
   if merchant.earned > 0 and ns.Settings().chatAlert then
-    ns.Print(("vendor visit: sold %s of tracked items, %s profit (session %s)"):format(
-      ns.Money(merchant.earned), ns.ProfitMoney(merchant.profit), ns.Money(ns.BucketProfit(ns.session))))
+    ns.Print(("vendor visit: sold %s of tracked items, %s (session %s)"):format(
+      ns.Money(merchant.earned), ns.ProfitOrLoss(merchant.profit), ns.ProfitMoney(ns.BucketProfit(ns.session))))
   end
   merchant = nil
 end

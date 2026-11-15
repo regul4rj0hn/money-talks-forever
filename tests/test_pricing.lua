@@ -18,7 +18,9 @@ T.Test("basic shuffle / no profit / missing / soulbound excluded", function()
     },
   })
   local by = ByName()
-  assert(#ns.results == 3)
+  local recorded = 0
+  for _, r in ipairs(ns.results) do if r.profession ~= ns.CONVERT_PROFESSION then recorded = recorded + 1 end end
+  assert(recorded == 3, "excluded: BoP robe and the recipe without an output item")
   assert(by.Shirt.status == ns.STATUS.SHUFFLE and by.Shirt.profit == 15)
   assert(by.Belt.status == ns.STATUS.NOPROFIT)
   assert(by.Bolt.status == ns.STATUS.MISSING)
@@ -40,7 +42,7 @@ T.Test("craftable reagents use the cheaper of buy vs craft", function()
   local b = by.Shirt.breakdown[1]
   assert(b.source == "craft" and b.buyUnit == 60 and b.craftUnit == 40)
   assert(by.Bolt.cost == 40, "bolt must not be priced by unbolting its own output")
-  assert(by.Unbolt.cost == 40)
+  assert(by.Unbolt.cost == 60, "cloth can't come from bolts crafted out of cloth: buy the bolt")
 
   W.ah[2996] = nil
   by = ByName()
@@ -111,10 +113,14 @@ T.Test("max reagent prices and Auctionator shopping list", function()
   assert(by.Shirt.plan.buys[1].maxPrice == 33)
   -- Pants: buys 4 cloth for 80, vendor 500 -> slack 419 -> cap floor(20 + 419 / 4) = 124
   assert(by.Pants.plan.buys[1].maxPrice == 124)
+  -- "List me!" recipes count too, capped by AH value after the cut: Thread makes 5, AH 50 each -> net 237.5,
+  -- buys 1 cloth -> cap floor(20 + 237.5 - 20 - 1) = 236. Bolt: net 57 -> cap floor(20 + (57 - 40 - 1) / 2) = 28.
+  assert(by.Thread.status == ns.STATUS.LIST and by.Thread.plan.buys[1].maxPrice == 236)
+  assert(by.Bolt.status == ns.STATUS.LIST and by.Bolt.plan.buys[1].maxPrice == 28)
   local caps = ns.CollectShoppingCaps()
-  assert(#caps == 1 and caps[1].name == "Linen Cloth" and caps[1].maxPrice == 124 and caps[1].recipes == 2)
+  assert(#caps == 1 and caps[1].name == "Linen Cloth" and caps[1].maxPrice == 236 and caps[1].recipes == 4)
 
   ns.CreateReagentShoppingList()
   local list = W.createdLists[ns.SHOPPING_LIST_NAME]
-  assert(list and #list == 1 and list[1] == '"Linen Cloth";;;;;;;;0.0124;;;;', tostring(list and list[1]))
+  assert(list and #list == 1 and list[1] == '"Linen Cloth";;;;;;;;0.0236;;;;', tostring(list and list[1]))
 end)

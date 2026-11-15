@@ -174,6 +174,8 @@ C_Item = {
   RequestLoadItemDataByID = function() end,
   GetItemNameByID = function(id) return W.items[id] and W.items[id][1] end,
   GetItemID = function(location) return location.itemID end,
+  -- W.itemSpells[itemID] = spellID of the item's "Use:" effect
+  GetItemSpell = function(id) local s = W.itemSpells and W.itemSpells[id]; if s then return "Use", s end end,
 }
 C_CurrencyInfo = { GetCurrencyInfo = function() return nil end }
 
