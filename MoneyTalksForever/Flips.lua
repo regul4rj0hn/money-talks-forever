@@ -1,4 +1,4 @@
--- Money Talks Forever: "vendor flips" - AH listings priced below what a vendor pays for the item.
+-- Money Talks Forever: "flips" - AH listings priced below what a vendor pays for the item.
 -- Source: the game's replicate data, i.e. every AH listing, downloaded by a full scan (ours or Auctionator's).
 local _, ns = ...
 
@@ -114,7 +114,7 @@ function ns.ScanReplicateForFlips(force, attempt)
 
     local total = 0
     for _, e in ipairs(items) do total = total + e.profit end
-    ns.Print(("vendor flips: %d item(s) on the AH below vendor price, %s total profit (/mtf flips)%s"):format(
+    ns.Print(("flips: %d item(s) on the AH below vendor price, %s total profit (/mtf flips)%s"):format(
       #items, ns.Money(total), skipped > 0 and (" - %d listing(s) skipped, item data not loaded"):format(skipped) or ""))
   end
 
@@ -224,7 +224,7 @@ function ns.CreateFlipsShoppingList()
     if cap > 0 then table.insert(terms, { name = e.name, maxPrice = cap }) end
   end
   if #terms == 0 then
-    ns.Print("no vendor flips found yet - at the AH, click Full scan on the Vendor flips tab.")
+    ns.Print("no flips found yet - at the AH, click Full scan on the Flips tab.")
     return
   end
   local added, err = ns.CreateAuctionatorList(ns.FLIPS_LIST_NAME, terms)

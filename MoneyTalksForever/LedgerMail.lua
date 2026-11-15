@@ -86,7 +86,7 @@ local function Process(e, names)
   if e.kind == "sale" then
     local net = e.bid - e.consignment
     local refund = math.max(0, e.money - net)
-    local profit = ns.RecordAHSale(itemID, e.count, net, refund)
+    local profit = ns.RecordAHSale(itemID, e.count, net, refund, e.deposit)
     if profit then
       visit.sales = visit.sales + 1
       visit.earned = visit.earned + net

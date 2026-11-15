@@ -72,15 +72,17 @@ local COMMANDS = {
     run = function()
       ns.ShowTab("flips")
       if not ns.ScanReplicateForFlips(true) and not ns.flips.scannedAt then
-        ns.Print("no full scan data yet - at the AH, click Full scan on the Vendor flips tab.")
+        ns.Print("no full scan data yet - at the AH, click Full scan on the Flips tab.")
       end
     end },
-  { name = "fullscan", help = "full AH scan for vendor flips (at the AH, once per 15 min)",
+  { name = "fullscan", help = "full AH scan for flips (at the AH, once per 15 min)",
     run = function() ns.ShowTab("flips"); ns.StartFullScan() end },
-  { name = "profit", usage = "profit [reset]", help = "show what you've made; 'reset' clears this character's history",
+  { name = "profit", usage = "profit [session|reset]",
+    help = "show what you've made; 'session' clears this session, 'reset' clears this character's history",
     run = function(arg)
-      if arg == "reset" then
-        StaticPopup_Show("MONEYTALKSFOREVER_RESET_LEDGER")
+      local popup = ({ session = "MONEYTALKSFOREVER_RESET_SESSION", reset = "MONEYTALKSFOREVER_RESET_LEDGER" })[arg]
+      if popup then
+        StaticPopup_Show(popup)
         return
       end
       ns.ShowTab("profit")

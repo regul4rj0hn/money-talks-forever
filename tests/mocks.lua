@@ -77,6 +77,7 @@ function Widget:IsShown() return self.shown end
 function Widget:CreateFontString() return NewWidget("FontString") end
 function Widget:CreateTexture() return NewWidget("Texture") end
 function Widget:SetText(t) self.text = t end
+function Widget:SetTitle(t) self.text = t end -- portrait frames (PortraitFrameMixin)
 function Widget:GetText() return self.text end
 function Widget:SetChecked(v) self.checked = v end
 function Widget:GetChecked() return self.checked end
@@ -94,8 +95,12 @@ function Widget:SetDataProvider(provider)
   end
 end
 
-function CreateFrame(kind, name)
+-- Child frames of the templates the addon uses (template children have capitalized keys, like methods).
+local TEMPLATE_CHILDREN = { ButtonFrameTemplate = { "Inset" }, BasicFrameTemplateWithInset = { "Inset" } }
+
+function CreateFrame(kind, name, _, template)
   local w = NewWidget(kind)
+  for _, key in ipairs(TEMPLATE_CHILDREN[template] or {}) do w[key] = NewWidget("Frame") end
   if name then _G[name] = w end
   return w
 end
@@ -215,6 +220,9 @@ C_AuctionHouse = {
   PlaceBid = function() end,
   PostItem = function() return true end,
   PostCommodity = function() return true end,
+  -- nil unless a test sets W.itemDeposit / W.commodityDeposit (per unit): then the addon knows the deposit up front
+  CalculateItemDeposit = function(_, _, qty) return W.itemDeposit and W.itemDeposit * (qty or 1) end,
+  CalculateCommodityDeposit = function(_, _, qty) return W.commodityDeposit and W.commodityDeposit * (qty or 1) end,
   GetAuctionInfoByID = function(id) return W.auctionsByID[id] end,
   GetNumReplicateItems = function() return #W.replicate end,
   GetReplicateItemInfo = function(i) -- 0-based, like the real API

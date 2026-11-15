@@ -6,6 +6,27 @@ Each version is a [GitHub release](https://github.com/regul4rj0hn/money-talks-fo
 
 ## [Unreleased]
 
+### Added
+- **Clear session** and **Clear all** buttons on the Overview (Clear all also on the Profit tab, replacing Reset),
+  and `/mtf profit session`. Both ask for confirmation.
+
+### Changed
+- **New window layout**, like the game's professions window: a round portrait, icon tabs on the right edge, each
+  tab's summary under the title and its buttons along the bottom.
+- New **Overview** tab, shown by default: profit so far (session, today, all time), and the two best crafts and
+  flips right now, with shortcuts to each tab, the shopping lists and Full scan.
+- The **Profit** tab now only lists the items sold; its totals moved to the Overview.
+- "Vendor flips" is now just "Flips" everywhere.
+- Gold per hour is only shown once the session is 10 minutes old; before that, the session's profit is shown.
+
+### Fixed
+- AH sales could show a loss: when buying on the AH right after listing, or listing several auctions quickly, that
+  spending was recorded as the listing's deposit, and the difference counted as a lost deposit when the auction sold.
+  Sales now use the deposit stated on the sale mail, and listings use the deposit the game calculates.
+- Items whose data wasn't loaded yet showed a question mark instead of their icon.
+- The Profit tab showed `item:12345` for items whose name wasn't loaded yet.
+- The Flips tab's "Full scan requested" message was drawn over the list; it now only shows when the list is empty.
+
 ## [0.6.0] - 2026-11-15
 
 ### Removed

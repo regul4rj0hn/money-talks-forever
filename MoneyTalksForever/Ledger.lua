@@ -210,10 +210,12 @@ local function TakeDeposit(itemID, qty)
   return total
 end
 
--- An auction sold: `net` = sale price minus the AH cut. depositRefund = deposit paid back with the payout.
-function ns.RecordAHSale(itemID, qty, net, depositRefund)
-  local deposit = TakeDeposit(itemID, qty)
-  local lost = math.max(0, deposit - (depositRefund or 0))
+-- An auction sold: `net` = sale price minus the AH cut. depositRefund = deposit paid back with the payout,
+-- depositPaid = that auction's deposit as stated on the sale mail. The mail is the truth for this auction, so the
+-- deposit we recorded when listing is only used when the mail doesn't state one.
+function ns.RecordAHSale(itemID, qty, net, depositRefund, depositPaid)
+  local recorded = TakeDeposit(itemID, qty)
+  local lost = math.max(0, (depositPaid or recorded) - (depositRefund or 0))
   return RecordSale(itemID, qty, net, "ah", lost)
 end
 
@@ -238,6 +240,13 @@ end
 
 function ns.ResetLedger()
   MoneyTalksForeverDB.ledger[ns.CharKey()] = nil
+  ns.session = NewBucket()
+  ns.sessionStart = nil
+  ns.NotifyUI()
+end
+
+-- Starts a new session: this session's totals and gold per hour start over. Today and all time are kept.
+function ns.ResetSession()
   ns.session = NewBucket()
   ns.sessionStart = nil
   ns.NotifyUI()

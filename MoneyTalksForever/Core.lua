@@ -4,7 +4,7 @@
 --   settings = { ... },                              see DEFAULTS
 --   chars    = { [charKey] = { recipes = { [recipeID] = recipe } } },   recorded by Scanner.lua
 --   deposits = { [itemID] = { [duration] = per-unit deposit } },        measured at the AH
---   flips    = { [realm] = last vendor flips scan },
+--   flips    = { [realm] = last flips scan },
 --   ledger   = { [charKey] = profit-so-far ledger },                    see Ledger.lua
 -- }
 local _, ns = ...
@@ -18,7 +18,7 @@ local DEFAULTS = {
   flipMinProfit = 1,            -- copper; a listing must make at least this when vendored to count as a flip
   ahDuration = 1,               -- auction duration used for deposits: 1 = 12h, 2 = 24h, 3 = 48h
   chatAlert = true,             -- print summaries (scans, vendor and mailbox visits) to chat
-  tab = "crafts",               -- last open tab
+  tab = "overview",             -- last open tab
 }
 
 function ns.Settings()

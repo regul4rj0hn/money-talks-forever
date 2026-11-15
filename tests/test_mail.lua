@@ -61,3 +61,35 @@ T.Test("ledger: AH sales from mail and lost deposits", function()
   assert(L.items[2996].ahQty == 1 and L.items[2996].earned == 14 and L.items[2996].cost == 10 + 3)
   W.inbox = {}
 end)
+
+T.Test("ledger: deposits come from the game and the sale mail, not from other spending", function()
+  LINEN.ah = { [2589] = 20, [2996] = 60 }
+  Setup(LINEN)
+  ns.session = ns.NewLedgerBucket()
+  W.money, W.bag, W.inbox = 100000, {}, {}
+  Fire("PLAYER_LOGIN")
+  local L = ns.Ledger()
+
+  -- Two shirts listed one by one (deposit 12 each) while also buying 500 worth of commodities: one money update.
+  W.itemDeposit = 12
+  ns.RecordPurchase(2568, 2, 300)
+  C_AuctionHouse.PostItem({ itemID = 2568 }, 1, 1, nil, 400)
+  C_AuctionHouse.PostItem({ itemID = 2568 }, 1, 1, nil, 400)
+  W.money = W.money - 500 - 24
+  Fire("PLAYER_MONEY")
+  W.itemDeposit = nil
+  local d = L.deposits[2568]
+  assert(#d == 2 and d[1].amount == 12 and d[2].amount == 12, "each listing gets its own deposit, not the purchase")
+
+  -- A wrong recorded deposit doesn't matter for a sale: the mail says 12 and pays 12 back.
+  d[1].amount = 100
+  W.inbox = { { subject = "Auction successful: Linen Shirt", money = 200 - 10 + 12,
+    invoice = { type = "seller", itemName = "Linen Shirt", bid = 200, deposit = 12, consignment = 10, count = 1 } } }
+  Fire("MAIL_SHOW")
+  W.inbox = {}
+  Fire("MAIL_INBOX_UPDATE")
+  Fire("MAIL_CLOSED")
+  local fl = L.all.flips
+  assert(fl.earned == 190 and fl.cost == 150 and (fl.deposits or 0) == 0, "sale: refunded deposit is no cost")
+  assert(ns.BucketProfit(ns.session) == 40)
+end)

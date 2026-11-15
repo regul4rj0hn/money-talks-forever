@@ -110,6 +110,13 @@ function ns.ItemInfo(item)
            equippable = equipLoc ~= nil and equipLoc ~= "" }
 end
 
+-- An item's icon, read from the game files: known even before the item's data is loaded from the server.
+function ns.ItemIcon(itemID)
+  if not itemID then return nil end
+  local icon = select(5, C_Item.GetItemInfoInstant(itemID))
+  return icon
+end
+
 function ns.ItemSellPrice(item)
   return (select(11, C_Item.GetItemInfo(item)))
 end

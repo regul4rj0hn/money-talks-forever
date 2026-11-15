@@ -2,29 +2,34 @@
 
 A World of Warcraft: Forever addon for making gold, using Auctionator's prices:
 
-- **Crafting shuffles:** flags craftable items as **"Shuffle me!"** when their reagents cost less on the Auction House
+- **Crafts:** flags craftable items as **"Shuffle me!"** when their reagents cost less on the Auction House
   than the crafted item sells for to a vendor. It shows a step-by-step buy and craft plan, and creates a shopping list
   with the most you can pay per reagent.
-- **Vendor flips:** finds AH listings priced below what a vendor pays for them.
+- **Flips:** finds AH listings priced below what a vendor pays for them.
 - **AH or vendor:** tells you when listing on the AH beats vendoring, deposit risk included.
 - **Profit so far:** tracks what you actually paid and earned from crafts, flips and AH sales, per session, day and
   all time.
 
 ## Screenshots
 
+**Overview:** profit so far this session, today and all time, and the best crafts and flips right now. The icons
+on the right switch tabs.
+
+![Overview](docs/screenshots/overview.png)
+
 **Crafts:** every recorded recipe with reagent cost, vendor and auction value, and the "Shuffle me!" verdict.
 
 ![Crafts tab](docs/screenshots/crafts.png)
 
-**Vendor flips:** AH listings you can buy and sell to a vendor for a profit, after a full scan.
+**Flips:** AH listings you can buy and sell to a vendor for a profit, here with a full scan in progress.
 
-![Vendor flips tab](docs/screenshots/flips.png)
+![Flips tab](docs/screenshots/flips.png)
 
-**Profit:** what you actually made from crafts and flips this session, today and all time, item by item.
+**Profit:** every item you sold, how, and what it made.
 
 ![Profit tab](docs/screenshots/profit.png)
 
-## How crafting shuffles work
+## How crafts work
 
 1. Open each of your profession windows once. Money Talks Forever records every learned recipe that produces an item,
    along with its required reagents. This is saved per character, so you don't need to reopen the window afterwards.
@@ -58,16 +63,16 @@ kept. Or copy the `MoneyTalksForever` folder from this repo. Requires
 
 | Command | Effect |
 |---|---|
-| `/mtf` | Toggle the results window (hover a row for the reagent breakdown, shift-click to link) |
+| `/mtf` | Toggle the window (hover a row for the reagent breakdown, shift-click to link) |
 | `/mtf list` | Print every "Shuffle me!" item to chat |
 | `/mtf vendor` | Toggle using NPC vendor prices for reagents (default on) |
 | `/mtf craft` | Toggle pricing craftable reagents at their own craft cost when cheaper (default on) |
 | `/mtf soulbound` | Toggle including soulbound crafts (default off) |
 | `/mtf minprofit <gold>` | Minimum profit per craft to be flagged, e.g. `0.5` = 50s |
 | `/mtf shop` | Create the Auctionator shopping list `Money Talks Forever` with max prices (same as the **Shopping list** button) |
-| `/mtf flips` | Open the Vendor flips tab (AH listings cheaper than their vendor price) |
-| `/mtf profit` | Open the Profit tab; `/mtf profit reset` clears this character's profit history |
-| `/mtf fullscan` | Full AH scan for vendor flips (at the AH, once per 15 minutes) |
+| `/mtf flips` | Open the Flips tab (AH listings cheaper than their vendor price) |
+| `/mtf profit` | Open the Profit tab; `/mtf profit session` clears this session, `/mtf profit reset` clears this character's profit history |
+| `/mtf fullscan` | Full AH scan for flips (at the AH, once per 15 minutes) |
 | `/mtf debug` | Print diagnostic info (scan state, Auctionator settings, counts) |
 | `/mtf flipmin <gold>` | Minimum profit per flip listing, e.g. `0.01` = 1s |
 | `/mtf duration 12\|24\|48` | Auction duration used for deposits (default 12h) |
@@ -103,14 +108,14 @@ price**, not just one craft's worth. Reagents bought from NPC vendors are printe
 Auctionator applies the cap to an item's cheapest listing. When you open an item, more expensive listings are still
 shown, so stop buying at the max price.
 
-## Vendor flips
+## Flips
 
 Sometimes items are listed on the AH for less than a vendor pays for them. Buy them and sell them to any NPC for a
-risk-free profit, no crafting needed. The **Vendor flips** tab (`/mtf flips`) lists every such item from the last
+risk-free profit, no crafting needed. The **Flips** tab (`/mtf flips`) lists every such item from the last
 **full** Auctionator scan. For each item it shows the number of listings, the quantity, the most to pay per unit, the
 total cost and the profit.
 
-- At the AH, click **Full scan** on the Vendor flips tab (or `/mtf fullscan`). This downloads every listing, and
+- At the AH, click **Full scan** on the Flips tab (or `/mtf fullscan`). This downloads every listing, and
   Money Talks Forever compares each listing's unit price with the vendor price. Bid-only and your own auctions are skipped.
   The AH allows one full scan every 15 minutes, shared with Auctionator.
   A progress bar next to the button shows each step. **Waiting** for the AH to send the listings has no progress
@@ -126,9 +131,11 @@ total cost and the profit.
 
 ## Profit so far
 
-The **Profit** tab (`/mtf profit`) shows what you actually made. It uses the prices you paid and the money vendors
-gave you, not estimates. It shows this session, today and all time, separately for **Crafts** and **Flips**, plus your
-gold per hour this session. Hover a number for items sold, vendor money, cost and how much of the cost is estimated.
+The **Overview** tab shows what you actually made. It uses the prices you paid and the money vendors gave you, not
+estimates. It shows this session, today and all time, separately for **Crafts** and **Flips**, plus your gold per
+hour once the session is 10 minutes old. Hover a number for items sold, vendor money, cost and how much of the cost is estimated. The
+**Profit** tab (`/mtf profit`) lists every item you sold, all time. **Clear session** (on the Overview) starts the session's totals and gold per hour
+over; **Clear all** (Overview or Profit tab) clears this character's whole profit history. Both ask first.
 
 How it's tracked, per character:
 
@@ -180,13 +187,13 @@ Files load in the order listed in `MoneyTalksForever.toc` and share the addon na
 | `Scanner.lua` | Records learned recipes and their required reagents when a profession window opens |
 | `Pricing.lua` | Recipe evaluation: buy vs craft per reagent, the step-by-step plan, "Shuffle me!" |
 | `AuctionHouse.lua` | AH deposits, the AH-or-vendor verdict and the reagent shopping list |
-| `Flips.lua` | Vendor flips: full scans and reading every AH listing |
+| `Flips.lua` | Flips: full scans and reading every AH listing |
 | `Tooltip.lua` | The "Shuffle me!" line on item tooltips |
 | `Ledger.lua` | Profit bookkeeping: stock at cost, crafts, sales, deposits, totals per period |
 | `LedgerAH.lua`, `LedgerVendor.lua`, `LedgerMail.lua` | What feeds the ledger: AH purchases and listings, vendor windows, AH sale mail |
 | `Commands.lua` | Slash commands (one table, which also generates `/mtf help`) and `/mtf debug` |
-| `UI/Widgets.lua` | Table, row and button helpers, and the tab registry |
-| `UI/*Tab.lua`, `UI/Window.lua` | One file per tab; the window is built from the registered tabs |
+| `UI/Widgets.lua` | Table, row, button and box helpers, and the tab registry |
+| `UI/*Tab.lua`, `UI/Window.lua` | One file per tab; the window (portrait frame with icon tabs on the right) is built from the registered tabs |
 
 ### Tests and checks
 

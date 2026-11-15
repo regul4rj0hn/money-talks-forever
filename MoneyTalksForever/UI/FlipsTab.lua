@@ -1,4 +1,4 @@
--- Money Talks Forever: Vendor flips tab - AH listings below vendor price, the Full scan button and its progress bar.
+-- Money Talks Forever: Flips tab - AH listings below vendor price, the Full scan button and its progress bar.
 local _, ns = ...
 local UI = ns.UI
 local C, Colorize, Money = ns.COLOR, ns.Colorize, ns.Money
@@ -21,7 +21,7 @@ local function ShowRowTooltip(row)
   GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
   GameTooltip:SetItemByID(e.itemID)
   GameTooltip:AddLine(" ")
-  GameTooltip:AddLine(Colorize("Vendor flip", C.GREEN) .. ": buy on the AH, sell to any vendor.")
+  GameTooltip:AddLine(Colorize("Flip", C.GREEN) .. ": buy on the AH, sell to any vendor.")
   UI.TipPair(("Buy %d in %d listing(s)"):format(e.qty, e.listings), Money(e.cost))
   UI.TipPair("Vendor pays", Money(e.vendor))
   UI.TipPair("Profit", ns.ProfitMoney(e.profit))
@@ -37,7 +37,7 @@ local function InitRow(row, e)
   if not row.cells then UI.BuildCells(row, COLUMNS, ShowRowTooltip) end
   local cells = row.cells
   row.data = e
-  row.icon:SetTexture(e.icon or UI.QUESTION_MARK_ICON)
+  row.icon:SetTexture(UI.ItemIcon(e.itemID, e.icon))
   cells.item:SetText(e.link or e.name)
   cells.listings:SetText(e.listings)
   cells.qty:SetText(e.qty)
@@ -111,16 +111,18 @@ local function Build(panel)
   local fullScan = UI.Button(panel, "Full scan", 100, function() ns.StartFullScan() end, "Full AH scan",
     "Downloads every AH listing and looks for items below vendor price. Must be at the AH. "
     .. "The AH allows one full scan every 15 minutes, shared with Auctionator.")
-  fullScan:SetPoint("TOPLEFT", panel, "BOTTOMLEFT", 12, -8)
+  fullScan:SetPoint("LEFT", panel.footer, "LEFT", 0, 0)
   panel.progress = CreateProgressBar(panel, fullScan)
   -- The bar only polls while visible; check right away when the panel opens, in case a scan is running.
   panel:SetScript("OnShow", function() UpdateProgress(panel.progress) end)
 end
 
-local function EmptyText(f)
+-- Only shown over an empty list; while a scan runs over old results, the progress bar says what's happening.
+local function EmptyText()
+  local f = ns.flips
+  if #f.items > 0 then return "" end
   if ns.fullScanPending then return "Full scan requested, waiting for the auction house..." end
   if ns.flipScanRunning then return "Reading listings..." end
-  if #f.items > 0 then return "" end
   if f.scannedAt then return "No listings below vendor price in the last full scan." end
   if ns.lastScanIncremental then
     return "Auctionator's last scan was incremental, which doesn't include individual listings.\n"
@@ -131,21 +133,25 @@ local function EmptyText(f)
   return msg
 end
 
-local function Refresh(panel)
+local function Summary()
   local f = ns.flips
-  UI.SetRows(panel, f.items)
-  panel.empty:SetText(EmptyText(f))
-  UpdateProgress(panel.progress)
-
   if not f.scannedAt then return "" end
   local total = 0
   for _, e in ipairs(f.items) do total = total + e.profit end
   return ("%d flips  |  %s total  |  scanned %d min ago"):format(#f.items, ns.ProfitMoney(total), MinutesAgo(f.scannedAt))
 end
 
+local function Refresh(panel)
+  UI.SetRows(panel, ns.flips.items)
+  panel.empty:SetText(EmptyText())
+  UpdateProgress(panel.progress)
+  return Summary()
+end
+
 UI.RegisterTab({
-  key = "flips", label = "Vendor flips", buttonWidth = 110,
+  key = "flips", label = "Flips", icon = "Interface\\Icons\\INV_Misc_Bag_10",
   columns = COLUMNS, initRow = InitRow,
+  Summary = Summary, EmptyText = EmptyText, ShowTooltip = ShowRowTooltip,
   Build = Build,
   Refresh = Refresh,
   OnRefreshButton = function()

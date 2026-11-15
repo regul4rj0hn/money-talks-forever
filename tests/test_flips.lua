@@ -1,9 +1,9 @@
--- Tests: vendor flips and full scans
+-- Tests: flips and full scans
 local T = ...
 local ns, W, Fire, flush = T.ns, T.W, T.Fire, T.flush
 local Setup, ByName, LINEN = T.Setup, T.ByName, T.LINEN
 
-T.Test("vendor flips from full scan listings", function()
+T.Test("flips from full scan listings", function()
   -- vendor prices: Linen Cloth 1, Bolt 10, Shirt 200
   Setup(LINEN)
   W.replicate = {

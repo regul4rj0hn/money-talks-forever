@@ -1,12 +1,14 @@
 -- Money Talks Forever: shared UI building blocks and the tab registry.
 --
--- A tab is registered once with ns.UI.RegisterTab{...} and the window (Window.lua) builds everything from it:
---   key, label, buttonWidth     identity and tab button
---   columns, initRow, top       the scrolling table: column specs, row initializer, optional top offset
---   Build(panel)                optional: extra widgets for the tab (footer controls, summary block)
---   Refresh(panel) -> text      redraw the tab; returns the footer summary text
+-- A tab is registered once with ns.UI.RegisterTab{...} and the window (Window.lua) builds everything from it.
+-- Tabs show in registration order (TOC order) as icons on the window's right edge.
+--   key, label, icon, title     identity: side tab tooltip and icon, window title (default: label)
+--   columns, initRow            optional: a scrolling table with these column specs and row initializer
+--   Build(panel)                optional: extra widgets; panel.footer is the window's bottom button bar
+--   Refresh(panel) -> text      redraw the tab; returns the text for the header line under the title
 --   OnRefreshButton()           what the footer's Refresh button does on this tab
 --   OnShoppingList(), shoppingTip   optional: the footer's Shopping list button (hidden when absent)
+--   Summary(), EmptyText(), ShowTooltip(row)   optional: reused by the Overview tab
 local _, ns = ...
 
 local UI = { tabs = {}, ROW_H = 20, QUESTION_MARK_ICON = 134400 }
@@ -57,14 +59,13 @@ function UI.BuildCells(row, cols, onEnter)
   end)
 end
 
--- A panel with column headers and a scrolling list, filling the window between the tabs and the footer.
+-- A panel with column headers and a scrolling list, filling its parent.
 -- panel.scrollBox takes a data provider; panel.empty is the centered "nothing here" text.
-function UI.CreateTable(parent, cols, initializer, top)
+function UI.CreateTable(parent, cols, initializer)
   local panel = CreateFrame("Frame", nil, parent)
-  panel:SetPoint("TOPLEFT", 0, top or -56)
-  panel:SetPoint("BOTTOMRIGHT", 0, 40)
+  panel:SetAllPoints()
 
-  local x = 16
+  local x = 8
   for _, col in ipairs(cols) do
     local h = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     h:SetPoint("TOPLEFT", x, 0)
@@ -75,8 +76,8 @@ function UI.CreateTable(parent, cols, initializer, top)
   end
 
   local scrollBox = CreateFrame("Frame", nil, panel, "WowScrollBoxList")
-  scrollBox:SetPoint("TOPLEFT", 12, -16)
-  scrollBox:SetPoint("BOTTOMRIGHT", -30, 0)
+  scrollBox:SetPoint("TOPLEFT", 4, -16)
+  scrollBox:SetPoint("BOTTOMRIGHT", -22, 2)
   local scrollBar = CreateFrame("EventFrame", nil, panel, "MinimalScrollBar")
   scrollBar:SetPoint("TOPLEFT", scrollBox, "TOPRIGHT", 6, 0)
   scrollBar:SetPoint("BOTTOMLEFT", scrollBox, "BOTTOMRIGHT", 6, 0)
@@ -93,8 +94,26 @@ function UI.CreateTable(parent, cols, initializer, top)
   return panel
 end
 
+-- Icon for a row's item. Icons saved at scan time can be the "?" placeholder of an item that wasn't loaded yet.
+function UI.ItemIcon(itemID, saved)
+  local icon = ns.ItemIcon(itemID)
+  if icon and icon ~= UI.QUESTION_MARK_ICON then return icon end
+  return saved or UI.QUESTION_MARK_ICON
+end
+
 function UI.SetRows(panel, list)
   panel.scrollBox:SetDataProvider(CreateDataProvider(list), ScrollBoxConstants.RetainScrollPosition)
+end
+
+local function AttachTooltip(b, title, text)
+  if not title then return end
+  b:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:AddLine(title)
+    GameTooltip:AddLine(text, 1, 1, 1, true)
+    GameTooltip:Show()
+  end)
+  b:SetScript("OnLeave", GameTooltip_Hide)
 end
 
 -- A standard button with an optional hover tooltip.
@@ -103,16 +122,41 @@ function UI.Button(parent, text, width, onClick, tipTitle, tipText)
   b:SetSize(width, 22)
   b:SetText(text)
   b:SetScript("OnClick", onClick)
-  if tipTitle then
-    b:SetScript("OnEnter", function(self)
-      GameTooltip:SetOwner(self, "ANCHOR_TOP")
-      GameTooltip:AddLine(tipTitle)
-      GameTooltip:AddLine(tipText, 1, 1, 1, true)
-      GameTooltip:Show()
-    end)
-    b:SetScript("OnLeave", GameTooltip_Hide)
-  end
+  AttachTooltip(b, tipTitle, tipText)
   return b
+end
+
+-- A big icon with a gold name and a grey line under it, like the entries of the professions window.
+function UI.IconButton(parent, icon, name, sub, onClick, tipTitle, tipText)
+  local b = CreateFrame("Button", nil, parent)
+  b:SetSize(230, 36)
+  b.icon = b:CreateTexture(nil, "ARTWORK")
+  b.icon:SetSize(36, 36)
+  b.icon:SetPoint("LEFT")
+  b.icon:SetTexture(icon)
+  local hl = b:CreateTexture(nil, "HIGHLIGHT")
+  hl:SetAllPoints(b.icon)
+  hl:SetTexture("Interface\\Buttons\\ButtonHilight-Square")
+  hl:SetBlendMode("ADD")
+  b.label = b:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  b.label:SetPoint("TOPLEFT", b.icon, "TOPRIGHT", 8, -3)
+  b.label:SetText(name)
+  b.sub = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  b.sub:SetPoint("TOPLEFT", b.label, "BOTTOMLEFT", 0, -3)
+  b.sub:SetTextColor(0.7, 0.7, 0.7)
+  b.sub:SetText(sub)
+  b:SetScript("OnClick", onClick)
+  AttachTooltip(b, tipTitle, tipText)
+  return b
+end
+
+-- A bordered box with a gold title, like the profession boxes of the professions window.
+function UI.Section(parent, title)
+  local s = CreateFrame("Frame", nil, parent, "InsetFrameTemplate")
+  s.title = s:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+  s.title:SetPoint("TOPLEFT", 14, -12)
+  s.title:SetText(title)
+  return s
 end
 
 -- Tooltip line helpers: label on the left in light grey, value on the right in white.

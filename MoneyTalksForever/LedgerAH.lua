@@ -26,15 +26,25 @@ local function OnPlaceBid(auctionID, amount)
   table.insert(pendingBuys, { itemID = info.itemKey.itemID, qty = info.quantity or 1, cost = amount, t = GetTime() })
 end
 
--- Listings of tracked items waiting for their deposit to be paid.
+-- Listings of tracked items waiting for their deposit to be paid. `deposit` is what the game says the listing
+-- costs (nil if it can't tell us), so other spending at the same time isn't mistaken for the deposit.
 local pendingPosts = {}
 
-local function OnPost(location, _, qty)
+local function AddPendingPost(location, qty, depositFn, ...)
   if not location or not C_Item.GetItemID then return end
   local ok, itemID = pcall(C_Item.GetItemID, location)
   if ok and itemID and ns.IsTracked(itemID) then
-    table.insert(pendingPosts, { itemID = itemID, qty = qty or 1, t = GetTime() })
+    table.insert(pendingPosts, { itemID = itemID, qty = qty or 1, deposit = ns.SafeNumber(depositFn, ...), t = GetTime() })
   end
+end
+
+local function OnPostItem(location, duration, qty)
+  AddPendingPost(location, qty, C_AuctionHouse.CalculateItemDeposit, location, duration, qty or 1)
+end
+
+local function OnPostCommodity(location, duration, qty)
+  local ok, itemID = pcall(C_Item.GetItemID, location)
+  AddPendingPost(location, qty, C_AuctionHouse.CalculateCommodityDeposit, ok and itemID, duration, qty or 1)
 end
 
 -- Hooks only observe calls (no taint): they run after the original function.
@@ -46,12 +56,12 @@ function ns.InstallLedgerHooks()
   if AH.StartCommoditiesPurchase then hooksecurefunc(AH, "StartCommoditiesPurchase", OnStartCommoditiesPurchase) end
   if AH.ConfirmCommoditiesPurchase then hooksecurefunc(AH, "ConfirmCommoditiesPurchase", OnConfirmCommoditiesPurchase) end
   if AH.PlaceBid then hooksecurefunc(AH, "PlaceBid", OnPlaceBid) end
-  if AH.PostItem then hooksecurefunc(AH, "PostItem", OnPost) end
-  if AH.PostCommodity then hooksecurefunc(AH, "PostCommodity", OnPost) end
+  if AH.PostItem then hooksecurefunc(AH, "PostItem", OnPostItem) end
+  if AH.PostCommodity then hooksecurefunc(AH, "PostCommodity", OnPostCommodity) end
 end
 
--- Gold left your bags: confirm pending buyouts (exact amounts), and treat what's left while a listing is pending
--- as that listing's deposit.
+-- Gold left your bags: confirm pending buyouts (exact amounts), then the deposits of pending listings. A listing
+-- with a known deposit is confirmed once that much was spent; for one without, everything left is its deposit.
 local function MatchSpending()
   local now = GetMoney()
   local spent = (lastMoney or now) - now
@@ -66,12 +76,15 @@ local function MatchSpending()
       table.remove(pendingBuys, i)
     end
   end
-  -- Whatever was spent beyond purchases while a listing is pending is that listing's deposit.
   while #pendingPosts > 0 do
     local p = pendingPosts[1]
     if GetTime() - p.t > 15 then
       table.remove(pendingPosts, 1) -- never posted (e.g. needed confirmation and was cancelled)
-    elseif spent > 0 then
+    elseif p.deposit and spent >= p.deposit then
+      ns.RecordDeposit(p.itemID, p.qty, p.deposit)
+      spent = spent - p.deposit
+      table.remove(pendingPosts, 1)
+    elseif not p.deposit and spent > 0 then
       ns.RecordDeposit(p.itemID, p.qty, spent)
       spent = 0
       table.remove(pendingPosts, 1)

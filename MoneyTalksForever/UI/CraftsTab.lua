@@ -111,7 +111,7 @@ local function InitRow(row, d)
   if not row.cells then UI.BuildCells(row, COLUMNS, ShowRowTooltip) end
   local cells = row.cells
   row.data = d
-  row.icon:SetTexture(d.icon or UI.QUESTION_MARK_ICON)
+  row.icon:SetTexture(UI.ItemIcon(d.itemID, d.icon))
   cells.item:SetText(d.itemLink or d.name or ("item:" .. d.itemID))
   cells.prof:SetText(d.profession or "")
   cells.method:SetText(d.plan and (d.usesCrafting and Colorize("buy + craft", C.BLUE) or Colorize("buy all", C.LIGHT)) or "")
@@ -138,7 +138,7 @@ end
 local function BuildFilter(panel)
   local cb = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
   cb:SetSize(24, 24)
-  cb:SetPoint("TOPLEFT", panel, "BOTTOMLEFT", 12, -6)
+  cb:SetPoint("LEFT", panel.footer, "LEFT", 0, 0)
   cb.text = cb:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   cb.text:SetPoint("LEFT", cb, "RIGHT", 2, 0)
   cb.text:SetText("Only show Shuffle me!")
@@ -149,36 +149,37 @@ local function BuildFilter(panel)
   panel.onlyShuffle = cb
 end
 
-local function Refresh(panel)
-  local onlyShuffle = ns.Settings().onlyShuffle
-  panel.onlyShuffle:SetChecked(onlyShuffle)
+local function EmptyText()
+  if #ns.results == 0 then return "No recipes recorded yet.\nOpen each of your profession windows once." end
+  if not ns.AuctionatorAPI() then return "Auctionator is not loaded." end
+  return "Nothing to shuffle right now.\nScan the auction house with Auctionator."
+end
 
-  local list, counts = {}, {}
-  for _, r in ipairs(ns.results) do
-    counts[r.status] = (counts[r.status] or 0) + 1
-    if not onlyShuffle or r.status == ns.STATUS.SHUFFLE then table.insert(list, r) end
-  end
-  UI.SetRows(panel, list)
-
-  if #list > 0 then
-    panel.empty:SetText("")
-  elseif #ns.results == 0 then
-    panel.empty:SetText("No recipes recorded yet.\nOpen each of your profession windows once.")
-  elseif not ns.AuctionatorAPI() then
-    panel.empty:SetText("Auctionator is not loaded.")
-  else
-    panel.empty:SetText("Nothing to shuffle right now.\nScan the auction house with Auctionator.")
-  end
-
-  local S = ns.STATUS
+local function Summary()
+  local S, counts = ns.STATUS, {}
+  for _, r in ipairs(ns.results) do counts[r.status] = (counts[r.status] or 0) + 1 end
   return ("%s  |  %d no profit  |  %s"):format(
     Colorize((counts[S.SHUFFLE] or 0) .. " shuffle", C.GREEN), counts[S.NOPROFIT] or 0,
     Colorize((counts[S.MISSING] or 0) .. " no price", C.ORANGE))
 end
 
+local function Refresh(panel)
+  local onlyShuffle = ns.Settings().onlyShuffle
+  panel.onlyShuffle:SetChecked(onlyShuffle)
+
+  local list = {}
+  for _, r in ipairs(ns.results) do
+    if not onlyShuffle or r.status == ns.STATUS.SHUFFLE then table.insert(list, r) end
+  end
+  UI.SetRows(panel, list)
+  panel.empty:SetText(#list > 0 and "" or EmptyText())
+  return Summary()
+end
+
 UI.RegisterTab({
-  key = "crafts", label = "Crafts", buttonWidth = 100,
+  key = "crafts", label = "Crafts", icon = "Interface\\Icons\\Trade_BlackSmithing",
   columns = COLUMNS, initRow = InitRow,
+  Summary = Summary, EmptyText = EmptyText, ShowTooltip = ShowRowTooltip,
   Build = BuildFilter,
   Refresh = Refresh,
   OnRefreshButton = function()
