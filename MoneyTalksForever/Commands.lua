@@ -1,4 +1,4 @@
--- Money Talks Forever: slash commands (/mtf, and /shuffle from the CraftShuffler days) and the debug dump.
+-- Money Talks Forever: slash commands (/mtf) and the debug dump.
 local _, ns = ...
 
 local function Toggle(key, label)
@@ -135,7 +135,6 @@ local function PrintHelp()
 end
 
 SLASH_MONEYTALKSFOREVER1 = "/mtf"
-SLASH_MONEYTALKSFOREVER2 = "/shuffle" -- the old CraftShuffler command keeps working
 SlashCmdList.MONEYTALKSFOREVER = function(msg)
   local name, arg = (msg or ""):lower():match("^%s*(%S*)%s*(.-)%s*$")
   local command = byName[name]

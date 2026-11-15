@@ -1,4 +1,4 @@
--- Money Talks Forever: saved data, settings and the one-time import from the old CraftShuffler name.
+-- Money Talks Forever: saved data and settings.
 --
 -- MoneyTalksForeverDB = {
 --   settings = { ... },                              see DEFAULTS
@@ -38,28 +38,6 @@ function ns.CharStore()
 end
 
 ---------------------------------------------------------------------------
--- Import from CraftShuffler (the addon's name up to v0.4.0)
----------------------------------------------------------------------------
--- Its saved variables only exist if that addon is still installed and enabled; OptionalDeps makes it load first.
--- Only imports when we have no data of our own yet.
-local OLD_ADDON = "CraftShuffler"
-
-local function ImportOldData()
-  local old = CraftShufflerDB
-  if type(old) ~= "table" then return false end
-  local db = MoneyTalksForeverDB
-  if db and (db.migratedFrom or (db.chars and next(db.chars))) then return false end
-  MoneyTalksForeverDB = old
-  old.migratedFrom = OLD_ADDON
-  return true
-end
-
-local function DisableOldAddon()
-  local disable = (C_AddOns and C_AddOns.DisableAddOn) or DisableAddOn
-  if disable then pcall(disable, OLD_ADDON) end
-end
-
----------------------------------------------------------------------------
 -- Loading
 ---------------------------------------------------------------------------
 local function InitSavedData()
@@ -75,14 +53,6 @@ end
 
 ns.On("ADDON_LOADED", function(name)
   if name ~= ns.ADDON_NAME then return end
-  ns.migrated = ImportOldData()
   InitSavedData()
 end)
 
-ns.On("PLAYER_LOGIN", function()
-  if ns.migrated then
-    DisableOldAddon()
-    ns.Print("imported your CraftShuffler data (recipes, deposits, flips, profit history). CraftShuffler is now "
-      .. "disabled: /reload, then you can delete its folder from Interface/AddOns.")
-  end
-end)

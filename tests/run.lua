@@ -2,7 +2,7 @@
 -- Run from the repo root:  lua tests/run.lua
 local T = dofile("tests/mocks.lua")
 
-local FILES = { "pricing", "flips", "ledger", "mail", "migration", "ui" }
+local FILES = { "pricing", "flips", "ledger", "mail", "saved_data", "ui" }
 for _, name in ipairs(FILES) do
   local path = "tests/test_" .. name .. ".lua"
   local chunk = loadfile(path)

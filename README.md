@@ -10,8 +10,6 @@ A World of Warcraft: Forever addon for making gold, using Auctionator's prices:
 - **Profit so far:** tracks what you actually paid and earned from crafts, flips and AH sales, per session, day and
   all time.
 
-Formerly called **CraftShuffler**; see [Upgrading from CraftShuffler](#upgrading-from-craftshuffler).
-
 ## How crafting shuffles work
 
 1. Open each of your profession windows once. Money Talks Forever records every learned recipe that produces an item,
@@ -42,18 +40,11 @@ folder. To try an older or newer version, replace that folder with the one from 
 kept. Or copy the `MoneyTalksForever` folder from this repo. Requires
 [Auctionator](https://www.curseforge.com/wow/addons/auctionator).
 
-### Upgrading from CraftShuffler
-
-Install `MoneyTalksForever` **next to** your old `CraftShuffler` folder and log in once. Your recipes, deposits,
-flips and profit history are imported, and CraftShuffler is disabled. Then `/reload` and delete the `CraftShuffler`
-folder. The import only happens if Money Talks Forever has no data of its own yet. `/shuffle` still works as a
-shortcut for `/mtf`. Releases up to v0.4.0 are called CraftShuffler.
-
 ## Usage
 
 | Command | Effect |
 |---|---|
-| `/mtf` (or `/shuffle`) | Toggle the results window (hover a row for the reagent breakdown, shift-click to link) |
+| `/mtf` | Toggle the results window (hover a row for the reagent breakdown, shift-click to link) |
 | `/mtf list` | Print every "Shuffle me!" item to chat |
 | `/mtf vendor` | Toggle using NPC vendor prices for reagents (default on) |
 | `/mtf craft` | Toggle pricing craftable reagents at their own craft cost when cheaper (default on) |
@@ -170,7 +161,7 @@ Files load in the order listed in `MoneyTalksForever.toc` and share the addon na
 |---|---|
 | `Util.lua` | Shared helpers: colors, money formatting, item info, bag scanning, debouncing |
 | `Events.lua` | One event frame: modules subscribe with `ns.On(event, fn)`; internal `MTF_*` messages use `ns.Fire` |
-| `Core.lua` | Saved data, settings defaults and the one-time import from CraftShuffler |
+| `Core.lua` | Saved data and settings defaults |
 | `Auctionator.lua` | All calls to Auctionator's API: prices, shopping lists, the scan-finished callback |
 | `Scanner.lua` | Records learned recipes and their required reagents when a profession window opens |
 | `Pricing.lua` | Recipe evaluation: buy vs craft per reagent, the step-by-step plan, "Shuffle me!" |
