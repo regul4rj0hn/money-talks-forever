@@ -10,6 +10,20 @@ A World of Warcraft: Forever addon for making gold, using Auctionator's prices:
 - **Profit so far:** tracks what you actually paid and earned from crafts, flips and AH sales, per session, day and
   all time.
 
+## Screenshots
+
+**Crafts:** every recorded recipe with reagent cost, vendor and auction value, and the "Shuffle me!" verdict.
+
+![Crafts tab](docs/screenshots/crafts.png)
+
+**Vendor flips:** AH listings you can buy and sell to a vendor for a profit, after a full scan.
+
+![Vendor flips tab](docs/screenshots/flips.png)
+
+**Profit:** what you actually made from crafts and flips this session, today and all time, item by item.
+
+![Profit tab](docs/screenshots/profit.png)
+
 ## How crafting shuffles work
 
 1. Open each of your profession windows once. Money Talks Forever records every learned recipe that produces an item,
