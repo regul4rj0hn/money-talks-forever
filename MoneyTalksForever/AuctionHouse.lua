@@ -94,6 +94,48 @@ function ns.SaleVerdict(res)
 end
 
 ---------------------------------------------------------------------------
+-- Sell history: does an item actually sell often enough to be worth listing?
+---------------------------------------------------------------------------
+-- Units of each item that sold or expired on the AH, from your mail (LedgerMail.lua). Cancelled auctions don't
+-- count: that was your decision, not the market's. Once an item has many results, older ones count half, so the
+-- rate follows a changing market.
+local HALVE_AT = 40
+ns.SELL_RATE_MIN = 5 -- results needed before judging an item by its record
+
+local function History()
+  local market = MoneyTalksForeverDB.market or {}
+  MoneyTalksForeverDB.market = market
+  local realm = ns.RealmKey()
+  market[realm] = market[realm] or {}
+  return market[realm]
+end
+
+function ns.RecordAHOutcome(itemID, sold, expired)
+  local h = History()
+  local e = h[itemID] or { sold = 0, expired = 0 }
+  h[itemID] = e
+  e.sold, e.expired = e.sold + (sold or 0), e.expired + (expired or 0)
+  if e.sold + e.expired > HALVE_AT then e.sold, e.expired = e.sold / 2, e.expired / 2 end
+end
+
+-- Share of listed units that sold (0..1), units sold, units with a result. nil without any history.
+function ns.SellRate(itemID)
+  local e = History()[itemID]
+  local total = e and (e.sold + e.expired) or 0
+  if total <= 0 then return nil end
+  return e.sold / total, e.sold, total
+end
+
+-- For a row that says list it on the AH: true if your record for the item beats its break-even sell chance,
+-- false if not, nil when there isn't enough history to tell.
+function ns.SellRateVerdict(res)
+  if res.saleVerdict ~= "ah" or not res.breakEvenSell then return nil end
+  local rate, _, total = ns.SellRate(res.itemID)
+  if not rate or total < ns.SELL_RATE_MIN then return nil end
+  return rate >= res.breakEvenSell
+end
+
+---------------------------------------------------------------------------
 -- Reagent shopping list
 ---------------------------------------------------------------------------
 ns.SHOPPING_LIST_NAME = "Money Talks Forever"

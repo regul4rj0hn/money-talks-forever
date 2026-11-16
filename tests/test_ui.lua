@@ -124,6 +124,13 @@ T.Test("ui: every tab renders, rows and tooltips draw, buttons click", function(
   assert(W.createdLists["Money Talks Forever Flips"], "Shopping list button on the flips tab")
   ns.ShowTab("overview")
   Has(AllText(), "2 flips", "overview flips status")
+  local supply = ns.flips.supply
+  assert(supply[2568].qty == 1 and supply[2996].qty == 5 and supply[2996].auctions == 1, "competition per crafted item")
+  assert(supply[300] and supply[300].qty == 0, "crafted items nobody listed are known to have 0")
+  ns.ShowTab("crafts")
+  tips = HoverAll()
+  Has(tips, "Listed by others at the last full scan", "crafts row tooltip: competition")
+  Has(tips, "Your AH record: none yet", "crafts row tooltip: no sell history")
 
   -- Profit tab: empty, then after a sale
   Slash("profit")

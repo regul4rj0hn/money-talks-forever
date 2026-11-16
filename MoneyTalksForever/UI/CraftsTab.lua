@@ -16,7 +16,8 @@ local COLUMNS = {
     tip = "vendor: sell it to any vendor, the AH doesn't pay more.\n\nAH 7%+: list it on the AH. It pays more than "
       .. "a vendor as long as at least 7 in 100 of your listings sell. Unsold ones come back by mail, so all you "
       .. "risk is the deposit, and you can still vendor them. A low number is a safe bet; a high one only pays "
-      .. "off if the item sells reliably." },
+      .. "off if the item sells reliably.\n\nGreen: your own AH record for the item beats that number. Red: it "
+      .. "doesn't. Gold: not enough history yet. Hover a row for your record and the competition." },
   { key = "profit",  label = "Profit",        width = 110, justify = "RIGHT",
     tip = "Per craft, selling the flagged way: to a vendor for Shuffle me!, on the AH after the 5% cut for List me!. "
       .. "For the other rows, the better of the two." },
@@ -24,6 +25,35 @@ local COLUMNS = {
 }
 
 local function Percent(chance) return math.ceil((chance or 0) * 100) end
+local function Round(x) return math.floor(x + 0.5) end
+
+-- Sell via cell / record color: green = your record beats the break-even, red = it doesn't, gold = can't tell yet.
+local function SellRateColor(d)
+  local verdict = ns.SellRateVerdict(d)
+  if verdict == nil then return C.GOLD end
+  return verdict and C.GREEN or C.RED
+end
+
+-- How the item has done on the AH for you, and the competition at the last full scan.
+local function AddMarketLines(d)
+  local rate, sold, total = ns.SellRate(d.itemID)
+  if rate then
+    local line = ("Your AH record: %d of %d sold (%d%%)"):format(Round(sold), Round(total), Round(rate * 100))
+    if d.saleVerdict == "ah" and total < ns.SELL_RATE_MIN then
+      line = line .. Colorize(" - too few to judge yet", C.DIM)
+    end
+    GameTooltip:AddLine(Colorize(line, d.saleVerdict == "ah" and SellRateColor(d) or C.LIGHT))
+  else
+    UI.TipNote("Your AH record: none yet. Results show up here as your listings sell or expire.")
+  end
+  local f = ns.flips
+  local s = f.supply and f.supply[d.itemID]
+  if s and f.scannedAt then
+    local ago = math.floor((time() - f.scannedAt) / 60)
+    UI.TipNote(s.qty > 0 and ("Listed by others at the last full scan (%d min ago): %d in %d auction(s)."):format(
+      ago, s.qty, s.auctions) or ("Not listed by anyone else at the last full scan (%d min ago)."):format(ago))
+  end
+end
 
 ---------------------------------------------------------------------------
 -- Row tooltip: selling options, then the buy/craft plan
@@ -46,6 +76,7 @@ local function AddSellingLines(d)
   elseif d.auctionValue then
     GameTooltip:AddLine("Vendor it: the AH price after the cut doesn't beat the vendor price.", 0.9, 0.9, 0.9, true)
   end
+  if d.auctionValue then AddMarketLines(d) end
 end
 
 -- One step of a plan: a craft ("3x Bolt of Linen Cloth", count = times to craft) or a conversion, spelled out.
@@ -140,7 +171,7 @@ local function InitRow(row, d)
   local ahBetter = d.auctionNet and d.auctionNet > (d.vendorValue or 0)
   cells.auction:SetText(ahBetter and Colorize(Money(d.auctionValue), C.GOLD) or Money(d.auctionValue))
   if d.saleVerdict == "ah" then
-    cells.sellvia:SetText(Colorize(("AH %d%%+"):format(Percent(d.breakEvenSell)), C.GOLD))
+    cells.sellvia:SetText(Colorize(("AH %d%%+"):format(Percent(d.breakEvenSell)), SellRateColor(d)))
   elseif d.saleVerdict == "vendor" then
     cells.sellvia:SetText(Colorize("vendor", C.LIGHT))
   else

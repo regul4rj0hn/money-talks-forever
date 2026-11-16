@@ -6,6 +6,7 @@
 --   deposits = { [itemID] = { [duration] = per-unit deposit } },        measured at the AH
 --   flips    = { [realm] = last flips scan },
 --   ledger   = { [charKey] = profit-so-far ledger },                    see Ledger.lua
+--   market   = { [realm] = { [itemID] = { sold, expired } } },          your AH sell history, see AuctionHouse.lua
 -- }
 local _, ns = ...
 
@@ -43,7 +44,7 @@ end
 local function InitSavedData()
   MoneyTalksForeverDB = MoneyTalksForeverDB or {}
   local db = MoneyTalksForeverDB
-  for _, key in ipairs({ "settings", "chars", "deposits", "flips", "ledger" }) do
+  for _, key in ipairs({ "settings", "chars", "deposits", "flips", "ledger", "market" }) do
     db[key] = db[key] or {}
   end
   for k, v in pairs(DEFAULTS) do

@@ -11,7 +11,7 @@ local RETRY_DELAY = 5
 local FULL_SCAN_TIMEOUT = 90  -- seconds to wait for the AH to send the listings
 local SAME_SCAN_WINDOW = 15 * 60
 
-local function RealmKey() return GetRealmName() or "?" end
+local RealmKey = ns.RealmKey
 
 ns.On("PLAYER_LOGIN", function()
   local saved = MoneyTalksForeverDB.flips[RealmKey()]
@@ -85,6 +85,9 @@ function ns.ScanReplicateForFlips(force, attempt)
   local minProfit = ns.Settings().flipMinProfit
   local lookup = NewItemCache()
   local byItem, skipped, requested = {}, 0, {}
+  -- Competition for what you craft: units and auctions listed by others, per crafted item.
+  local supply = {}
+  for _, r in ipairs(ns.results) do supply[r.itemID] = { qty = 0, auctions = 0 } end
   local index = 0 -- replicate indices are 0-based
 
   local function Finish()
@@ -94,7 +97,7 @@ function ns.ScanReplicateForFlips(force, attempt)
       if a.profit ~= b.profit then return a.profit > b.profit end
       return a.itemID < b.itemID
     end)
-    ns.flips = { items = items, scannedAt = time(), listings = n, skipped = skipped }
+    ns.flips = { items = items, scannedAt = time(), listings = n, skipped = skipped, supply = supply }
     MoneyTalksForeverDB.flips[RealmKey()] = ns.flips
     ns.flipScanRunning = false
 
@@ -123,6 +126,8 @@ function ns.ScanReplicateForFlips(force, attempt)
     for i = index, last do
       local _, texture, count, _, _, _, _, _, _, buyout, _, _, _, owner, _, _, itemID = AH.GetReplicateItemInfo(i)
       if itemID and buyout and buyout > 0 and count and count > 0 and owner ~= me then
+        local s = supply[itemID]
+        if s then s.qty, s.auctions = s.qty + count, s.auctions + 1 end
         local info = lookup(itemID)
         if not info then
           skipped = skipped + 1

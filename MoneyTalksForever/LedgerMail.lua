@@ -4,6 +4,7 @@
 --   * an "Auction successful" mail (seller invoice) whose gold was collected -> AH sale
 --     income = sale price - AH cut (from the invoice); a deposit paid back with the payout is not a cost
 --   * an "Auction expired" / "Auction cancelled" mail whose item was taken -> that listing's deposit is lost
+--   * both feed your sell history per item (AuctionHouse.lua): sold units, and expired (not cancelled) ones
 -- Comparing snapshots works however the mail is opened (Blizzard's Open All, mail addons, one by one).
 local _, ns = ...
 
@@ -15,25 +16,26 @@ local function SubjectPattern(fmt)
   return "^" .. p .. "$"
 end
 
-local RETURNED_PATTERNS -- built on first use, after the client's strings are loaded
+local RETURNED_PATTERNS -- { { pattern, expired }, ... }, built on first use, after the client's strings are loaded
 local function ReturnedPatterns()
   if not RETURNED_PATTERNS then
     RETURNED_PATTERNS = {}
-    for _, fmt in ipairs({
-      AUCTION_EXPIRED_MAIL_SUBJECT or "Auction expired: %s",
-      AUCTION_REMOVED_MAIL_SUBJECT or "Auction cancelled: %s",
+    for _, s in ipairs({
+      { AUCTION_EXPIRED_MAIL_SUBJECT or "Auction expired: %s", true },
+      { AUCTION_REMOVED_MAIL_SUBJECT or "Auction cancelled: %s", false },
     }) do
-      local p = SubjectPattern(fmt)
-      if p then table.insert(RETURNED_PATTERNS, p) end
+      local p = SubjectPattern(s[1])
+      if p then table.insert(RETURNED_PATTERNS, { p, s[2] }) end
     end
   end
   return RETURNED_PATTERNS
 end
 
-local function IsReturnedSubject(subject)
+-- Is this an auction coming back, and did it expire (true) or was it cancelled (false)?
+local function ReturnedSubject(subject)
   if not subject then return false end
   for _, p in ipairs(ReturnedPatterns()) do
-    if subject:match(p) then return true end
+    if subject:match(p[1]) then return true, p[2] end
   end
   return false
 end
@@ -66,11 +68,13 @@ local function Snapshot()
         kind = "sale", itemName = itemName, bid = bid or 0, consignment = consignment or 0,
         deposit = deposit or 0, count = count, money = money,
       })
-    elseif hasItem and IsReturnedSubject(subject) then
-      local name, itemID, _, itemCount = GetInboxItem(i, 1)
+    elseif hasItem then
+      local returned, expired = ReturnedSubject(subject)
+      local name, itemID, _, itemCount
+      if returned then name, itemID, _, itemCount = GetInboxItem(i, 1) end
       if name then
-        add(("R|%s|%d"):format(tostring(itemID or name), itemCount or 1),
-          { kind = "returned", itemID = itemID, itemName = name, count = itemCount or 1 })
+        add(("R|%s|%d|%s"):format(tostring(itemID or name), itemCount or 1, tostring(expired)),
+          { kind = "returned", itemID = itemID, itemName = name, count = itemCount or 1, expired = expired })
       end
     end
   end
@@ -84,6 +88,7 @@ local function Process(e, names)
   local itemID = e.itemID or names()[e.itemName]
   if not itemID then return end
   if e.kind == "sale" then
+    ns.RecordAHOutcome(itemID, e.count, 0)
     local net = e.bid - e.consignment
     local refund = math.max(0, e.money - net)
     local profit = ns.RecordAHSale(itemID, e.count, net, refund, e.deposit)
@@ -93,6 +98,7 @@ local function Process(e, names)
       visit.profit = visit.profit + profit
     end
   else
+    if e.expired then ns.RecordAHOutcome(itemID, 0, e.count) end
     local lost = ns.RecordAuctionReturned(itemID, e.count)
     if lost > 0 then
       visit.returned = visit.returned + 1

@@ -42,6 +42,9 @@ function ns.ProfitMoney(copper)
   return ns.Colorize(ns.Money(copper), copper >= 0 and ns.COLOR.GREEN or ns.COLOR.RED)
 end
 
+-- AH data (listings, sell history) is per realm, shared by your characters there.
+function ns.RealmKey() return GetRealmName() or "?" end
+
 -- "12s profit" in green, or "3s loss" in red: never a "-3s profit".
 function ns.ProfitOrLoss(copper)
   copper = math.floor((copper or 0) + 0.5)

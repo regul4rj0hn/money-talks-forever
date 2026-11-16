@@ -201,6 +201,14 @@ The **Sell via** column says `vendor`, or `AH 14%+` (hover the column header for
   (a few %) is a safe bet even for slow items; a high one (50%+) only pays off for items that sell reliably, so
   check how often you see that item listed and sold.
 
+**Does it sell often enough?** The addon keeps your own record per item and realm: units that sold (from *Auction
+successful* mail) and units that expired. Cancelled auctions don't count, since that was your choice. Once an item
+has 5 or more results, the Sell via cell turns **green** when your record beats the number and **red** when it
+doesn't; until then it stays gold. Older results count half once an item has many, so the record follows a changing
+market. Hovering a row also shows how much others had listed at the last full scan (the competition), e.g.
+"Listed by others at the last full scan: 40 in 12 auction(s)". That's supply, not demand, but a long queue of
+cheaper sellers is worth knowing about before you list.
+
 The number comes from:
 
 ```
@@ -226,7 +234,7 @@ Files load in the order listed in `MoneyTalksForever.toc` and share the addon na
 | `Scanner.lua` | Records learned recipes and their required reagents when a profession window opens |
 | `Conversions.lua` | Right-click conversions (essences) as built-in recipes, and the item spells that perform them |
 | `Pricing.lua` | Recipe evaluation: buy vs craft per reagent, the step-by-step plan, "Shuffle me!" / "List me!" |
-| `AuctionHouse.lua` | AH deposits, the AH-or-vendor verdict and the reagent shopping list |
+| `AuctionHouse.lua` | AH deposits, the AH-or-vendor verdict, your sell history per item and the reagent shopping list |
 | `Flips.lua` | Flips: full scans and reading every AH listing |
 | `Tooltip.lua` | The "Shuffle me!" line on item tooltips |
 | `Ledger.lua` | Profit bookkeeping: stock at cost, crafts, sales, deposits, totals per period |

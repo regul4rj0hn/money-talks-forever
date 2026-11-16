@@ -93,3 +93,41 @@ T.Test("ledger: deposits come from the game and the sale mail, not from other sp
   assert(fl.earned == 190 and fl.cost == 150 and (fl.deposits or 0) == 0, "sale: refunded deposit is no cost")
   assert(ns.BucketProfit(ns.session) == 40)
 end)
+
+T.Test("sell history: sold and expired units per item, cancelled ones don't count", function()
+  LINEN.ah = { [2589] = 20, [2996] = 60 }
+  Setup(LINEN)
+  MoneyTalksForeverDB.market = nil -- older saved data has no market table yet
+  ns.session = ns.NewLedgerBucket()
+  W.money, W.bag, W.inbox = 100000, {}, {}
+  ns.RecordPurchase(2568, 10, 1000)
+  assert(ns.SellRate(2568) == nil, "no history yet")
+
+  W.inbox = {
+    { subject = "Auction successful: Linen Shirt", money = 600,
+      invoice = { type = "seller", itemName = "Linen Shirt", bid = 600, deposit = 0, consignment = 30, count = 3 } },
+    { subject = "Auction expired: Linen Shirt", item = { name = "Linen Shirt", id = 2568, count = 1 } },
+    { subject = "Auction cancelled: Linen Shirt", item = { name = "Linen Shirt", id = 2568, count = 2 } },
+  }
+  Fire("MAIL_SHOW")
+  W.inbox = {}
+  Fire("MAIL_INBOX_UPDATE")
+  Fire("MAIL_CLOSED")
+  local rate, sold, total = ns.SellRate(2568)
+  assert(rate == 0.75 and sold == 3 and total == 4, "3 sold, 1 expired; the 2 cancelled are ignored")
+
+  -- Judged only with enough results: 4 < 5, then 4 of 5 = 80% beats a 50% break-even, not a 90% one
+  local row = { itemID = 2568, saleVerdict = "ah", breakEvenSell = 0.5 }
+  assert(ns.SellRateVerdict(row) == nil, "too few results")
+  ns.RecordAHOutcome(2568, 1, 0)
+  assert(ns.SellRateVerdict(row) == true)
+  row.breakEvenSell = 0.9
+  assert(ns.SellRateVerdict(row) == false)
+  assert(ns.SellRateVerdict({ itemID = 2568, saleVerdict = "vendor" }) == nil, "only for rows that say list it")
+
+  -- Many results: older ones count half, the rate is kept
+  for _ = 1, 40 do ns.RecordAHOutcome(2996, 1, 1) end
+  rate, sold, total = ns.SellRate(2996)
+  assert(rate == 0.5 and total <= 41, "halved: " .. total)
+  W.inbox = {}
+end)
