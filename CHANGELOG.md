@@ -6,6 +6,8 @@ Each version is a [GitHub release](https://github.com/regul4rj0hn/money-talks-fo
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-16
+
 ### Added
 - **Sell history**: units of each item that sold or expired on the AH (cancelled ones don't count), per realm, from
   your mail. Once an item has 5+ results, the Crafts tab's Sell via cell turns green when your record beats the
